@@ -20,7 +20,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: SITE_NAME,
     short_name: SITE_SHORT_NAME,
     description: SITE_DESCRIPTION,
-    start_url: "/",
+    start_url: "/home",
     display: "standalone",
     orientation: "portrait-primary",
     background_color: BACKGROUND_COLOR,

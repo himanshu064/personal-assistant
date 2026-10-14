@@ -20,7 +20,7 @@ export const ICON_512_PATH = "/brand/icon-512.png";
 export const ICON_MASKABLE_PATH = "/brand/icon-maskable-512.png";
 
 /** Browser UI colour on mobile (address bar, PWA title bar). */
-export const THEME_COLOR = "#0a0a0a";
+export const THEME_COLOR = "#f3f3f1";
 
 /** Splash screen background when the installed app opens. */
 export const BACKGROUND_COLOR = "#ffffff";
@@ -29,7 +29,7 @@ export const BACKGROUND_COLOR = "#ffffff";
  * Hex brand colour used in emails. Email clients do not support CSS
  * variables, so this must stay a literal hex value.
  */
-export const BRAND_PRIMARY_HEX = "#0a0a0a";
+export const BRAND_PRIMARY_HEX = "#1c1c1b";
 
 /** Sender display name used when RESEND_FROM_EMAIL has no name part. */
 export const EMAIL_SENDER_NAME = SITE_NAME;

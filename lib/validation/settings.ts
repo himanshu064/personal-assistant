@@ -1,12 +1,18 @@
 import { z } from "zod";
 import { AI_PROVIDERS } from "@/lib/ai/providers";
+import { LEAD_TIME_OPTIONS } from "@/lib/validation/reminders";
 
 export const preferencesSchema = z.object({
   timezone: z.string().min(1, "Choose your timezone."),
   provider: z.enum(AI_PROVIDERS),
   model: z.string().min(1, "Choose a model."),
+  defaultLeadMinutes: z.coerce
+    .number()
+    .int()
+    .refine((v) => (LEAD_TIME_OPTIONS as readonly number[]).includes(v), "Choose a valid option."),
 });
-export type PreferencesValues = z.infer<typeof preferencesSchema>;
+export type PreferencesInput = z.input<typeof preferencesSchema>;
+export type PreferencesValues = z.output<typeof preferencesSchema>;
 
 export const apiKeySchema = z.object({
   provider: z.enum(AI_PROVIDERS),

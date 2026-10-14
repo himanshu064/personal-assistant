@@ -42,7 +42,7 @@ export function SignUpForm() {
       footer={
         <span>
           Already have an account?{" "}
-          <Link href="/sign-in" className="font-medium text-foreground underline-offset-4 hover:underline">
+          <Link href="/sign-in" className="text-foreground underline underline-offset-4">
             Sign in
           </Link>
         </span>
@@ -57,7 +57,7 @@ export function SignUpForm() {
             {errors.password ? null : <FieldDescription>At least 8 characters.</FieldDescription>}
           </div>
           <FormError message={errors.root?.message} />
-          <Button type="submit" size="lg" className="h-11 w-full" disabled={isSubmitting}>
+          <Button type="submit" size="page" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
             Create account
           </Button>

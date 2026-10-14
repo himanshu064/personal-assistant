@@ -1,0 +1,101 @@
+/**
+ * Service worker: notifications only, ported from email-automation.
+ * It does not cache pages for offline use on purpose; reminders are the job.
+ *
+ * Rule for this whole file: EVERY push shows a notification. A push that shows
+ * nothing is a "silent push": Chrome replaces it with a generic message, and
+ * iOS cancels the subscription after a few, silently switching reminders off.
+ */
+
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
+
+self.addEventListener("push", (event) => {
+  let payload;
+  try {
+    payload = event.data ? event.data.json() : null;
+  } catch {
+    payload = null;
+  }
+
+  if (!payload || !payload.title) {
+    event.waitUntil(
+      self.registration.showNotification("Reminder", { body: "You have a new reminder.", tag: "fallback" }),
+    );
+    return;
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      // One tag per reminder, so a snoozed reminder replaces its old banner...
+      tag: payload.tag,
+      // ...and still alerts again instead of replacing it silently.
+      renotify: true,
+      icon: "/brand/icon-192.png",
+      badge: "/brand/icon-192.png",
+      vibrate: [200, 100, 200],
+      data: payload,
+    }),
+  );
+});
+
+/**
+ * Push services can retire an endpoint and issue a new one. Chrome fires this
+ * event when that happens; Safari does not, which is why the app also repairs
+ * a missing subscription when it opens (see use-push-notifications).
+ */
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      const old = event.oldSubscription;
+      let key = old && old.options && old.options.applicationServerKey;
+      if (!key) {
+        const res = await fetch("/api/push/vapid-public-key");
+        if (!res.ok) return;
+        const { publicKey } = await res.json();
+        key = urlBase64ToUint8Array(publicKey);
+      }
+      const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await fetch("/api/push/subscribe", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+      if (old && old.endpoint && old.endpoint !== sub.endpoint) {
+        await fetch("/api/push/unsubscribe", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ endpoint: old.endpoint }),
+        });
+      }
+    })().catch(() => undefined),
+  );
+});
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = self.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+/** Tapping the notification opens the reminder, reusing an open tab if there is one. */
+self.addEventListener("notificationclick", (event) => {
+  const data = event.notification.data || {};
+  event.notification.close();
+  const target = data.url || "/reminders";
+
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ("focus" in client) {
+          return client.navigate(target).then((c) => (c ? c.focus() : client.focus()));
+        }
+      }
+      return self.clients.openWindow(target);
+    }),
+  );
+});

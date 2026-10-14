@@ -1,6 +1,6 @@
 "use server";
 
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db } from "@/db";
 import { aiKeys, userSettings } from "@/db/schema";
@@ -18,36 +18,37 @@ export async function savePreferences(input: unknown): Promise<ActionResult> {
   const parsed = preferencesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Check the highlighted fields." };
 
-  const { timezone, provider, model } = parsed.data;
+  const { timezone, provider, model, defaultLeadMinutes } = parsed.data;
   if (!isValidTimezone(timezone)) return { ok: false, error: "Unknown timezone.", field: "timezone" };
   if (!isAllowedModel(provider, model)) return { ok: false, error: "That model is not available.", field: "model" };
 
   // One round trip: insert, or update when the row already exists.
   await db
     .insert(userSettings)
-    .values({ userId: user.id, timezone, provider, model })
-    .onConflictDoUpdate({ target: userSettings.userId, set: { timezone, provider, model } });
+    .values({ userId: user.id, timezone, provider, model, defaultLeadMinutes })
+    .onConflictDoUpdate({ target: userSettings.userId, set: { timezone, provider, model, defaultLeadMinutes } });
 
   updateTag(settingsTag(user.id));
   return { ok: true, message: "Preferences saved." };
 }
 
-/** Saves the browser's timezone the first time only; never overwrites a choice. */
+/**
+ * Saves the browser's timezone the first time only. A user_settings row is
+ * only ever created here or by savePreferences (which always sets a
+ * timezone), so "insert, do nothing on conflict" never overwrites a choice
+ * and costs no write when a row already exists.
+ */
 export async function saveDetectedTimezone(timezone: string): Promise<void> {
   const user = await requireUser();
   if (!isValidTimezone(timezone)) return;
 
-  const result = await db
+  const inserted = await db
     .insert(userSettings)
     .values({ userId: user.id, timezone })
-    .onConflictDoUpdate({
-      target: userSettings.userId,
-      set: { timezone },
-      setWhere: isNull(userSettings.timezone),
-    })
+    .onConflictDoNothing({ target: userSettings.userId })
     .returning({ userId: userSettings.userId });
 
-  if (result.length > 0) updateTag(settingsTag(user.id));
+  if (inserted.length > 0) updateTag(settingsTag(user.id));
 }
 
 export async function saveApiKey(input: unknown): Promise<ActionResult> {

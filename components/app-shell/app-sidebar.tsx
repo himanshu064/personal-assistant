@@ -3,56 +3,84 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Logo } from "@/components/brand/logo";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
-import { NAV_ITEMS, isActive } from "@/lib/constants/nav";
+import { NAV_ITEMS, isActive, type NavItem } from "@/lib/constants/nav";
+import { CommandSearch } from "./command-search";
+import { LinkPending } from "@/components/common/link-pending";
 
-/** Desktop navigation. Phones use the bottom tab bar instead. */
-export function AppSidebar({ userMenu }: { userMenu: ReactNode }) {
+// Active item: a white pill with a hairline border, as in the reference shots.
+const itemClass =
+  "h-10 rounded-xl px-3 text-[15px] font-normal text-foreground/80 hover:bg-white/70 data-active:bg-white data-active:font-normal data-active:text-foreground data-active:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.04)] [&_svg]:size-[18px]";
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        isActive={isActive(pathname, item.href)}
+        tooltip={item.label}
+        className={itemClass}
+        render={<Link href={item.href} />}
+      >
+        <item.icon strokeWidth={1.5} />
+        <span>{item.label}</span>
+        <LinkPending className="ml-auto" />
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
+/**
+ * Desktop navigation on the warm grey canvas: account card, search, then
+ * sections. Phones use the bottom tab bar instead.
+ */
+export function AppSidebar({ account }: { account: ReactNode }) {
   const pathname = usePathname();
+  const essentials = NAV_ITEMS.filter((i) => i.href !== "/settings");
+  const settings = NAV_ITEMS.filter((i) => i.href === "/settings");
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" render={<Link href="/" />}>
-              <Logo />
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+    <Sidebar variant="inset" collapsible="icon" className="[&_[data-slot=sidebar-inner]]:px-1">
+      <SidebarHeader className="gap-3 pt-3">
+        {account}
+        <CommandSearch />
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel className="h-9 px-1 text-[15px] font-normal text-foreground">Essentials</SidebarGroupLabel>
           <SidebarGroupContent>
-            <SidebarMenu>
-              {NAV_ITEMS.map((item) => (
-                <SidebarMenuItem key={item.href}>
-                  <SidebarMenuButton
-                    isActive={isActive(pathname, item.href)}
-                    tooltip={item.label}
-                    render={<Link href={item.href} />}
-                  >
-                    <item.icon />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+            <SidebarMenu className="gap-1">
+              {essentials.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarSeparator className="mx-3" />
+        <SidebarGroup>
+          <SidebarGroupLabel className="h-9 px-1 text-[15px] font-normal text-foreground">Account</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1">
+              {settings.map((item) => (
+                <NavLink key={item.href} item={item} pathname={pathname} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter>{userMenu}</SidebarFooter>
+      {/* Click the edge (or press Cmd/Ctrl B) to collapse or expand. */}
+      <SidebarRail />
     </Sidebar>
   );
 }

@@ -58,7 +58,7 @@ export function ForgotPasswordForm() {
         <FieldGroup>
           <FormField id="email" label="Email" type="email" autoComplete="email" inputMode="email" error={errors.email?.message} {...register("email")} />
           <FormError message={errors.root?.message} />
-          <Button type="submit" size="lg" className="h-11 w-full" disabled={isSubmitting}>
+          <Button type="submit" size="page" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
             Send reset link
           </Button>

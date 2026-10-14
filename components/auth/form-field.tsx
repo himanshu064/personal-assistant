@@ -18,7 +18,6 @@ export function FormField({
         name={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
-        className="h-11 text-base md:h-9 md:text-sm"
         {...inputProps}
       />
       {error ? <FieldError id={errorId}>{error}</FieldError> : null}

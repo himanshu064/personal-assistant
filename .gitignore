@@ -45,3 +45,6 @@ next-env.d.ts
 .claude
 # react-email preview build
 /.react-email
+
+# Local only notes (demo logins)
+*.local.md

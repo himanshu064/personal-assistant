@@ -27,7 +27,7 @@ export const resetPasswordSchema = z
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
 /** Only allow redirects to paths inside this app, never to other sites. */
-export function safeRedirect(path: string | null | undefined, fallback = "/"): string {
+export function safeRedirect(path: string | null | undefined, fallback = "/home"): string {
   if (!path || !path.startsWith("/") || path.startsWith("//")) return fallback;
   return path;
 }

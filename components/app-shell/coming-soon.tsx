@@ -4,7 +4,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 /** Placeholder for sections that arrive in a later phase. */
 export function ComingSoon({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description: string }) {
   return (
-    <Empty className="rounded-xl border border-dashed">
+    <Empty className="rounded-xl bg-card py-14 framed">
       <EmptyHeader>
         <EmptyMedia variant="icon">
           <Icon />

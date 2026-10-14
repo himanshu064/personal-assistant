@@ -19,6 +19,7 @@ export function SignInForm() {
   const redirectTo = safeRedirect(useSearchParams().get("redirect"));
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [resent, setResent] = useState(false);
+  const [sending, setSending] = useState(false);
   const {
     register,
     handleSubmit,
@@ -47,7 +48,9 @@ export function SignInForm() {
 
   async function resend() {
     if (!unverifiedEmail) return;
+    setSending(true);
     await sendVerificationEmail({ email: unverifiedEmail, callbackURL: "/verify-email?verified=1" });
+    setSending(false);
     setResent(true);
   }
 
@@ -58,7 +61,7 @@ export function SignInForm() {
       footer={
         <span>
           New here?{" "}
-          <Link href="/sign-up" className="font-medium text-foreground underline-offset-4 hover:underline">
+          <Link href="/sign-up" className="text-foreground underline underline-offset-4">
             Create an account
           </Link>
         </span>
@@ -95,13 +98,14 @@ export function SignInForm() {
               {resent ? (
                 <p className="mt-2 text-muted-foreground">Sent. Check your inbox.</p>
               ) : (
-                <Button type="button" variant="link" className="mt-1 h-auto p-0" onClick={resend}>
-                  Send the link again
+                <Button type="button" variant="link" className="mt-1 h-auto p-0" onClick={resend} disabled={sending}>
+                  {sending ? <Spinner /> : null}
+                  {sending ? "Sending" : "Send the link again"}
                 </Button>
               )}
             </div>
           ) : null}
-          <Button type="submit" size="lg" className="h-11 w-full" disabled={isSubmitting}>
+          <Button type="submit" size="page" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
             Sign in
           </Button>

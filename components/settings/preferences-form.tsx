@@ -1,11 +1,12 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormError } from "@/components/auth/form-error";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
@@ -13,9 +14,11 @@ import { toast } from "@/components/ui/toast";
 import { savePreferences } from "@/app/(app)/settings/actions";
 import type { ModelCatalog } from "@/lib/ai/models";
 import { AI_PROVIDERS, PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
-import { preferencesSchema, type PreferencesValues } from "@/lib/validation/settings";
+import { LEAD_TIME_LABELS, LEAD_TIME_OPTIONS } from "@/lib/validation/reminders";
+import { preferencesSchema, type PreferencesInput, type PreferencesValues } from "@/lib/validation/settings";
+import { safeAction } from "@/lib/safe-action";
 
-const selectClass = "w-full [&_select]:h-11 [&_select]:text-base md:[&_select]:h-9 md:[&_select]:text-sm";
+const selectClass = "w-full";
 
 export function PreferencesForm({
   catalog,
@@ -23,12 +26,19 @@ export function PreferencesForm({
   savedProviders,
 }: {
   catalog: ModelCatalog;
-  initial: { timezone: string | null; provider: AiProvider; model: string };
+  initial: { timezone: string | null; provider: AiProvider; model: string; defaultLeadMinutes: number };
   savedProviders: AiProvider[];
 }) {
-  // Every timezone the browser knows, for the picker.
-  const timezones = useMemo(() => Intl.supportedValuesOf("timeZone"), []);
   const detected = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
+  // Every timezone the browser knows. Browsers list some zones under older
+  // names (Chrome has "Asia/Calcutta" for "Asia/Kolkata"), so the saved and
+  // detected values are always added, or the picker would show blank.
+  const timezones = useMemo(() => {
+    const list = new Set(Intl.supportedValuesOf("timeZone"));
+    if (initial.timezone) list.add(initial.timezone);
+    list.add(detected);
+    return [...list].sort();
+  }, [initial.timezone, detected]);
 
   const {
     register,
@@ -39,9 +49,14 @@ export function PreferencesForm({
     control,
     formState: { errors, isSubmitting, isDirty },
     reset,
-  } = useForm<PreferencesValues>({
+  } = useForm<PreferencesInput, unknown, PreferencesValues>({
     resolver: zodResolver(preferencesSchema),
-    defaultValues: { timezone: initial.timezone ?? detected, provider: initial.provider, model: initial.model },
+    defaultValues: {
+      timezone: initial.timezone ?? detected,
+      provider: initial.provider,
+      model: initial.model,
+      defaultLeadMinutes: initial.defaultLeadMinutes,
+    },
   });
 
   const provider = useWatch({ control, name: "provider" });
@@ -55,7 +70,7 @@ export function PreferencesForm({
   }
 
   async function onSubmit(values: PreferencesValues) {
-    const result = await savePreferences(values);
+    const result = await safeAction(() => savePreferences(values));
     if (!result.ok) {
       setError(result.field === "timezone" || result.field === "model" ? result.field : "root", { message: result.error });
       return;
@@ -69,11 +84,7 @@ export function PreferencesForm({
   return (
     <Card>
       <form onSubmit={handleSubmit(onSubmit)} noValidate>
-        <CardHeader>
-          <CardTitle>Preferences</CardTitle>
-          <CardDescription>Used for reminder times and every AI feature.</CardDescription>
-        </CardHeader>
-        <CardContent className="py-4">
+        <CardContent className="py-2">
           <FieldGroup>
             <Field data-invalid={errors.timezone ? true : undefined}>
               <FieldLabel htmlFor="timezone">Timezone</FieldLabel>
@@ -89,6 +100,18 @@ export function PreferencesForm({
             </Field>
 
             <Field>
+              <FieldLabel htmlFor="defaultLeadMinutes">Default alert</FieldLabel>
+              <NativeSelect id="defaultLeadMinutes" className={selectClass} {...register("defaultLeadMinutes")}>
+                {LEAD_TIME_OPTIONS.map((m) => (
+                  <NativeSelectOption key={m} value={m}>
+                    {LEAD_TIME_LABELS[m]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldDescription>Used for new reminders unless you say otherwise.</FieldDescription>
+            </Field>
+
+            <Field>
               <FieldLabel htmlFor="provider">AI provider</FieldLabel>
               <NativeSelect id="provider" className={selectClass} {...register("provider", { onChange: (e) => onProviderChange(e.target.value as AiProvider) })}>
                 {AI_PROVIDERS.map((p) => (
@@ -98,7 +121,13 @@ export function PreferencesForm({
                 ))}
               </NativeSelect>
               {hasKeyForProvider ? null : (
-                <FieldDescription>Add a {PROVIDER_LABELS[provider]} key below to use AI features.</FieldDescription>
+                <FieldDescription>
+                  Add a {PROVIDER_LABELS[provider]} key in{" "}
+                  <Link href="/settings/api-keys" className="font-medium text-foreground underline underline-offset-4">
+                    AI keys
+                  </Link>{" "}
+                  to use AI features.
+                </FieldDescription>
               )}
             </Field>
 
@@ -116,12 +145,12 @@ export function PreferencesForm({
             <FormError message={errors.root?.message} />
           </FieldGroup>
         </CardContent>
-        <CardFooter className="justify-end">
-          <Button type="submit" className="h-11 w-full sm:h-9 sm:w-auto" disabled={isSubmitting || !isDirty}>
+        <div className="flex justify-end px-(--card-spacing) pt-2">
+          <Button type="submit" size="page" className="w-full sm:w-auto" disabled={isSubmitting || !isDirty}>
             {isSubmitting ? <Spinner /> : null}
             Save preferences
           </Button>
-        </CardFooter>
+        </div>
       </form>
     </Card>
   );

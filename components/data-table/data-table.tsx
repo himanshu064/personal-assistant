@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   columnSizingFeature,
@@ -55,7 +55,8 @@ type DataTableProps<TData extends RowData> = {
   stickyColumns?: string[];
   enableRowSelection?: boolean;
   onSelectionChange?: (rows: TData[]) => void;
-  emptyMessage?: string;
+  /** Shown when there are no rows: a string, or a full EmptyState. */
+  emptyMessage?: ReactNode;
   /**
    * Phones: render each row as a card instead of a table row. Wide tables
    * are hard to use on a small screen, so pass this for user facing lists.
@@ -87,6 +88,7 @@ export function DataTable<TData extends RowData>({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [changingSize, startTransition] = useTransition();
 
   const allColumns = useMemo<DataTableColumn<TData>[]>(() => {
     if (!enableRowSelection) return columns;
@@ -130,7 +132,8 @@ export function DataTable<TData extends RowData>({
   const headerGroups = table.getHeaderGroups();
   const sticky = new Set(stickyColumns);
   const selectedCount = Object.keys(rowSelection).length;
-  const paged = totalCount !== undefined;
+  // The pager only appears when there is more than the smallest page size to show.
+  const paged = totalCount !== undefined && totalCount > ALLOWED_PAGE_SIZES[0];
 
   /** Left offset for a sticky column: the widths of sticky columns before it. */
   function stickyLeft(columnId: string): number {
@@ -148,13 +151,13 @@ export function DataTable<TData extends RowData>({
       per_page: String(value) === String(DEFAULT_PAGE_SIZE) ? null : String(value),
       page: null,
     });
-    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    startTransition(() => router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false }));
   }
 
   const footer = paged ? (
-    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 border-t px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3">
-        <span className="text-xs text-muted-foreground">Rows</span>
+        <span className="text-xs text-muted-foreground">Rows per page</span>
         <Select value={String(pageSize)} onValueChange={changePageSize}>
           <SelectTrigger className="h-8 w-[72px]" aria-label="Rows per page">
             <SelectValue />
@@ -167,46 +170,46 @@ export function DataTable<TData extends RowData>({
             ))}
           </SelectContent>
         </Select>
-        {selectedCount > 0 ? (
-          <span className="text-xs text-muted-foreground">
-            {selectedCount} selected
-          </span>
-        ) : null}
+        {selectedCount > 0 ? <span className="text-xs text-muted-foreground">{selectedCount} selected</span> : null}
       </div>
-      <Pagination currentPage={currentPage} pageSize={pageSize} totalCount={totalCount} />
+      <Pagination currentPage={currentPage} pageSize={pageSize} totalCount={totalCount ?? 0} />
     </div>
   ) : null;
 
   return (
-    <div className="flex flex-col gap-4">
+    // One bordered container: toolbar, rows, then the pager, as on a dashboard table.
+    <div className="overflow-hidden rounded-xl bg-card framed">
       {searchPlaceholder !== null || filters ? (
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-2 border-b p-3 sm:flex-row sm:items-center">
           {searchPlaceholder !== null ? <SearchInput placeholder={searchPlaceholder} /> : null}
-          {filters}
+          {filters ? <div className="flex items-center gap-2 sm:ml-auto">{filters}</div> : null}
         </div>
       ) : null}
 
       {renderMobileRow ? (
-        <ul className="flex flex-col gap-2 md:hidden">
+        <ul className="flex flex-col divide-y md:hidden">
           {rows.length === 0 ? (
-            <li className="rounded-xl border py-12 text-center text-sm text-muted-foreground">{emptyMessage}</li>
+            <li className={cn("text-center text-sm text-muted-foreground", typeof emptyMessage === "string" && "py-12")}>{emptyMessage}</li>
           ) : (
             rows.map((row) => <li key={row.id}>{renderMobileRow(row)}</li>)
           )}
         </ul>
       ) : null}
 
-      <div className={cn("overflow-x-auto rounded-xl border bg-card", renderMobileRow && "hidden md:block")}>
+      <div
+        aria-busy={changingSize}
+        className={cn("overflow-x-auto transition-opacity", renderMobileRow && "hidden md:block", changingSize && "opacity-60")}
+      >
         <Table>
           <TableHeader>
             {headerGroups.map((group) => (
-              <TableRow key={group.id}>
+              <TableRow key={group.id} className="hover:bg-transparent">
                 {group.headers.map((header) => {
                   const isSticky = sticky.has(header.id);
                   return (
                     <TableHead
                       key={header.id}
-                      className={cn(isSticky && "sticky z-20 bg-muted shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]")}
+                      className={cn("h-11 px-4 text-[13px] font-normal text-muted-foreground", isSticky && "sticky z-20 bg-muted shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]")}
                       style={{
                         // 150 is TanStack's default size; only set widths that were asked for.
                         width: header.getSize() !== 150 ? header.getSize() : undefined,
@@ -222,8 +225,11 @@ export function DataTable<TData extends RowData>({
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={allColumns.length} className="py-12 text-center text-sm text-muted-foreground">
+              <TableRow className="hover:bg-transparent">
+                <TableCell
+                  colSpan={allColumns.length}
+                  className={cn("text-center text-sm whitespace-normal text-muted-foreground", typeof emptyMessage === "string" ? "py-12" : "p-0")}
+                >
                   {emptyMessage}
                 </TableCell>
               </TableRow>
@@ -235,7 +241,7 @@ export function DataTable<TData extends RowData>({
                     return (
                       <TableCell
                         key={cell.id}
-                        className={cn(isSticky && "sticky z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]")}
+                        className={cn("px-4 py-3 text-[15px]", isSticky && "sticky z-20 bg-background shadow-[2px_0_4px_-2px_rgba(0,0,0,0.1)]")}
                         style={isSticky ? { left: stickyLeft(cell.column.id) } : undefined}
                       >
                         <table.FlexRender cell={cell} />

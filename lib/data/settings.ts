@@ -30,6 +30,7 @@ async function getSettingsForUser(userId: string) {
         timezone: userSettings.timezone,
         provider: userSettings.provider,
         model: userSettings.model,
+        defaultLeadMinutes: userSettings.defaultLeadMinutes,
       })
       .from(userSettings)
       .where(eq(userSettings.userId, userId))
@@ -45,6 +46,7 @@ async function getSettingsForUser(userId: string) {
     timezone: settings?.timezone ?? null,
     provider: choice.provider,
     model: choice.model,
+    defaultLeadMinutes: settings?.defaultLeadMinutes ?? 0,
     keys: Object.fromEntries(keys.map((k) => [k.provider, { last4: k.last4, updatedAt: k.updatedAt }])) as Partial<
       Record<(typeof keys)[number]["provider"], { last4: string; updatedAt: Date }>
     >,

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
 import { NAV_ITEMS, isActive } from "@/lib/constants/nav";
+import { PendingIcon } from "@/components/common/link-pending";
 
 /**
  * Phone navigation, fixed to the bottom within thumb reach. The bottom
@@ -15,7 +16,7 @@ export function BottomTabBar() {
   return (
     <nav
       aria-label="Main"
-      className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur supports-[backdrop-filter]:bg-background/80 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t border-border/70 bg-card/90 pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-xl md:hidden"
     >
       <ul className="mx-auto grid max-w-lg grid-cols-5">
         {NAV_ITEMS.map((item) => {
@@ -26,11 +27,21 @@ export function BottomTabBar() {
                 href={item.href}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground transition-colors outline-none focus-visible:bg-muted",
-                  active && "text-foreground",
+                  "group flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground outline-none",
+                  active && "text-primary",
                 )}
               >
-                <item.icon className={cn("size-5", active && "stroke-[2.25]")} aria-hidden />
+                {/* Active tab: an indigo pill behind the icon, like a native tab bar. */}
+                <span
+                  className={cn(
+                    "flex h-8 w-14 items-center justify-center rounded-full transition-[background-color,scale] duration-150 ease-out group-focus-visible:ring-3 group-focus-visible:ring-ring/40 motion-safe:group-active:scale-[0.96]",
+                    active && "bg-secondary",
+                  )}
+                >
+                  <PendingIcon className="size-5">
+                    <item.icon className="size-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
+                  </PendingIcon>
+                </span>
                 {item.label}
               </Link>
             </li>

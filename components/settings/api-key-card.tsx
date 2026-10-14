@@ -12,6 +12,7 @@ import { toast } from "@/components/ui/toast";
 import { deleteApiKey, saveApiKey } from "@/app/(app)/settings/actions";
 import { PROVIDER_KEY_URLS, PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
 import { apiKeySchema, type ApiKeyValues } from "@/lib/validation/settings";
+import { safeAction } from "@/lib/safe-action";
 
 export function ApiKeyCard({
   provider,
@@ -31,7 +32,7 @@ export function ApiKeyCard({
   } = useForm<ApiKeyValues>({ resolver: zodResolver(apiKeySchema), defaultValues: { provider, apiKey: "" } });
 
   async function onSubmit(values: ApiKeyValues) {
-    const result = await saveApiKey(values);
+    const result = await safeAction(() => saveApiKey(values));
     if (!result.ok) return setError("apiKey", { message: result.error });
     reset({ provider, apiKey: "" });
     setEditing(false);
@@ -40,7 +41,7 @@ export function ApiKeyCard({
 
   async function remove() {
     setRemoving(true);
-    const result = await deleteApiKey({ provider });
+    const result = await safeAction(() => deleteApiKey({ provider }));
     setRemoving(false);
     if (!result.ok) return toast.add({ title: result.error, type: "error" });
     setEditing(true);
@@ -85,7 +86,7 @@ export function ApiKeyCard({
       </CardHeader>
       {editing ? (
         <CardContent>
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3 sm:flex-row sm:items-start">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1">
               <FormField
                 id={inputId}
@@ -98,13 +99,13 @@ export function ApiKeyCard({
                 {...register("apiKey")}
               />
             </div>
-            <div className="flex gap-2 sm:pt-6">
-              <Button type="submit" className="h-11 flex-1 sm:h-9 sm:flex-none" disabled={isSubmitting}>
+            <div className="flex gap-2">
+              <Button type="submit" size="page" className="flex-1 sm:flex-none" disabled={isSubmitting}>
                 {isSubmitting ? <Spinner /> : null}
                 {isSubmitting ? "Checking" : "Save key"}
               </Button>
               {saved ? (
-                <Button type="button" variant="ghost" className="h-11 sm:h-9" onClick={() => setEditing(false)}>
+                <Button type="button" variant="ghost" size="page" onClick={() => setEditing(false)}>
                   Cancel
                 </Button>
               ) : null}

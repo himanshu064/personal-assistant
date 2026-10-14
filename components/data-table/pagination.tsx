@@ -6,6 +6,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { cn } from "cn";
 import { buttonVariants } from "@/components/ui/button";
 import { withSearchParams } from "@/lib/url";
+import { PendingIcon } from "@/components/common/link-pending";
 
 /** Page links driven by `?page=`. Hidden when everything fits on one page. */
 export function Pagination({
@@ -44,7 +45,9 @@ export function Pagination({
           aria-label="Previous page"
           className={cn(buttonVariants({ variant: "outline", size: "icon" }), currentPage <= 1 && disabled)}
         >
-          <ChevronLeftIcon />
+          <PendingIcon>
+            <ChevronLeftIcon />
+          </PendingIcon>
         </Link>
         {/* Page numbers take too much room on phones; arrows are enough there. */}
         <div className="hidden items-center gap-1 sm:flex">
@@ -64,7 +67,7 @@ export function Pagination({
                   p === currentPage && "pointer-events-none",
                 )}
               >
-                {p}
+                <PendingIcon>{p}</PendingIcon>
               </Link>
             ),
           )}
@@ -75,7 +78,9 @@ export function Pagination({
           aria-label="Next page"
           className={cn(buttonVariants({ variant: "outline", size: "icon" }), currentPage >= totalPages && disabled)}
         >
-          <ChevronRightIcon />
+          <PendingIcon>
+            <ChevronRightIcon />
+          </PendingIcon>
         </Link>
       </div>
     </nav>

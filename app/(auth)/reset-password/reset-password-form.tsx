@@ -40,7 +40,7 @@ export function ResetPasswordForm() {
   if (expired) {
     return (
       <AuthCard title="This link has expired" description="Reset links work once and expire after 1 hour.">
-        <Link href="/forgot-password" className={buttonVariants({ size: "lg", className: "h-11 w-full" })}>
+        <Link href="/forgot-password" className={buttonVariants({ size: "page", className: "w-full" })}>
           Get a new link
         </Link>
       </AuthCard>
@@ -50,7 +50,7 @@ export function ResetPasswordForm() {
   if (done) {
     return (
       <AuthCard title="Password updated" description="You have been signed out everywhere. Sign in with your new password.">
-        <Link href="/sign-in" className={buttonVariants({ size: "lg", className: "h-11 w-full" })}>
+        <Link href="/sign-in" className={buttonVariants({ size: "page", className: "w-full" })}>
           Sign in
         </Link>
       </AuthCard>
@@ -64,7 +64,7 @@ export function ResetPasswordForm() {
           <FormField id="password" label="New password" type="password" autoComplete="new-password" error={errors.password?.message} {...register("password")} />
           <FormField id="confirm" label="Confirm password" type="password" autoComplete="new-password" error={errors.confirm?.message} {...register("confirm")} />
           <FormError message={errors.root?.message} />
-          <Button type="submit" size="lg" className="h-11 w-full" disabled={isSubmitting}>
+          <Button type="submit" size="page" className="w-full" disabled={isSubmitting}>
             {isSubmitting ? <Spinner /> : null}
             Update password
           </Button>

@@ -9,9 +9,21 @@ import { sendEmail } from "@/lib/email/send";
 import { VerifyEmail } from "@/emails/verify-email";
 import { ResetPasswordEmail } from "@/emails/reset-password";
 
-const appUrl = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
+/** Vercel sets these (without https://) on every deployment, including previews. */
+const vercelUrls = [process.env.VERCEL_URL, process.env.VERCEL_BRANCH_URL]
+  .filter((v): v is string => Boolean(v))
+  .map((host) => `https://${host}`);
+
+/**
+ * Set BETTER_AUTH_URL for Production only in Vercel. Previews then fall back
+ * to their own deployment URL, so sign in and email links work there too.
+ */
+const appUrl = process.env.BETTER_AUTH_URL ?? vercelUrls[0] ?? "http://localhost:3000";
 
 export const auth = betterAuth({
+  baseURL: appUrl,
+  // Preview deployments (and their branch URLs) may call the auth API.
+  trustedOrigins: vercelUrls,
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
