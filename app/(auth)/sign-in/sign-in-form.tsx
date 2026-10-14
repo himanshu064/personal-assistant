@@ -49,8 +49,12 @@ export function SignInForm() {
   async function resend() {
     if (!unverifiedEmail) return;
     setSending(true);
-    await sendVerificationEmail({ email: unverifiedEmail, callbackURL: "/verify-email?verified=1" });
+    const { error } = await sendVerificationEmail({ email: unverifiedEmail, callbackURL: "/verify-email?verified=1" });
     setSending(false);
+    if (error) {
+      setError("root", { message: error.status === 429 ? "Too many attempts. Wait a minute and try again." : "Could not send the link. Try again." });
+      return;
+    }
     setResent(true);
   }
 

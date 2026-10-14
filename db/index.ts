@@ -22,6 +22,8 @@ const client =
     // support prepared statements across pooled connections.
     prepare: false,
     connect_timeout: 15,
+    // Postgres notices (for example "query contains only stop words") are not errors.
+    onnotice: () => {},
     idle_timeout: 20,
     connection: {
       statement_timeout: 30000,

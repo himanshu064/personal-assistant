@@ -1,36 +1,55 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Personal Assistant
 
-## Getting Started
+A voice first assistant: reminders with push notifications, project chats that remember what you tell them, and (soon) Gmail suggestions. Built with Next.js 16, Drizzle on Neon Postgres, Better Auth and the AI SDK. Users bring their own Claude or Gemini key.
 
-First, run the development server:
+The full plan and decisions are in `.claude/plan/plan.md`.
+
+## Run it locally
+
+1. Copy `.env.example` to `.env` and fill it in (see the comments in that file).
+2. Install and start:
+
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
+
+3. Open http://localhost:3000.
+
+Without `RESEND_API_KEY`, sign up and password reset links are printed in the terminal instead of emailed.
+
+## Database
+
+Tables come from the Drizzle schema in `db/schema`. To change them:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm db:generate   # writes a migration from the schema
+# read the new SQL file in db/migrations
+pnpm db:migrate    # applies it
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Never use `db:push`. After a schema change, restart `pnpm dev` if the dev server reports a missing column.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Checks
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+pnpm typecheck
+pnpm lint
+```
 
-## Learn More
+Do not run `pnpm build` while `pnpm dev` is running; they share the `.next` folder.
 
-To learn more about Next.js, take a look at the following resources:
+## Scheduled jobs (after deploying)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Create this job on cron-job.org (or Vercel Cron):
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Job | Request | Every |
+|---|---|---|
+| Send due reminders | `POST https://<your domain>/api/cron/reminders` with header `x-cron-secret: <CRON_SECRET>` | 5 minutes |
 
-## Deploy on Vercel
+## Deploying to Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Add Postgres from the Vercel Storage tab (Neon). It sets `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
+- Set the Function Region to `iad1`, next to the database.
+- Set `BETTER_AUTH_URL` for the Production environment only; previews use their own URL.
+- Push notifications need HTTPS, so test them on the deployed site. On iPhone, add the app to the Home Screen first.

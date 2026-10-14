@@ -59,7 +59,7 @@ export function VoiceCapture({
   function submitTyped(event: React.FormEvent) {
     event.preventDefault();
     const text = typed.trim();
-    if (text.length < 2) return;
+    if (text.length < 2 || working) return;
     // The text stays until the parent moves on to the preview, so nothing is lost if drafting fails.
     onText(text, "text");
   }
@@ -75,7 +75,8 @@ export function VoiceCapture({
           className="min-h-24 text-base md:text-sm"
           autoFocus={typing}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) submitTyped(e);
+            // Not while an input method (Hindi, Japanese...) is still composing a word.
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submitTyped(e);
           }}
         />
         <div className="flex gap-2">
@@ -103,7 +104,7 @@ export function VoiceCapture({
         aria-pressed={active}
         aria-label={active ? "Stop listening" : "Start speaking"}
         className={cn(
-          // The one bold element in the app: an indigo orb that turns amber while listening.
+          // The one bold element in the app: a dark orb that turns amber while listening.
           "relative isolate flex size-28 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none",
           "shadow-[0_12px_32px_-10px_rgb(0_0_0/0.45),inset_0_1px_0_rgb(255_255_255/0.15)]",
           "transition-[background-color,scale,box-shadow] duration-150 ease-out motion-safe:enabled:active:scale-[0.96]",

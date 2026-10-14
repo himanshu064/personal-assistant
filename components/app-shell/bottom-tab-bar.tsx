@@ -1,17 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { cn } from "cn";
 import { NAV_ITEMS, isActive } from "@/lib/constants/nav";
-import { PendingIcon } from "@/components/common/link-pending";
+import { useOptimisticPathname } from "@/hooks/use-optimistic-pathname";
 
 /**
  * Phone navigation, fixed to the bottom within thumb reach. The bottom
  * padding keeps it clear of the iPhone home bar.
  */
 export function BottomTabBar() {
-  const pathname = usePathname();
+  const { href: pathname, onNavigate } = useOptimisticPathname();
 
   return (
     <nav
@@ -25,6 +24,7 @@ export function BottomTabBar() {
             <li key={item.href}>
               <Link
                 href={item.href}
+                onClick={onNavigate(item.href)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "group flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground outline-none",
@@ -38,9 +38,7 @@ export function BottomTabBar() {
                     active && "bg-secondary",
                   )}
                 >
-                  <PendingIcon className="size-5">
-                    <item.icon className="size-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
-                  </PendingIcon>
+                  <item.icon className="size-5" strokeWidth={active ? 2.25 : 1.75} aria-hidden />
                 </span>
                 {item.label}
               </Link>

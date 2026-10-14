@@ -1,3 +1,4 @@
+import NextTopLoader from "nextjs-toploader";
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,7 +38,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       suppressHydrationWarning
       className={`${body.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      {/* Browser extensions (for example Grammarly) add attributes to body before React loads. */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        {/* Thin bar at the top while a new page loads. */}
+        <NextTopLoader color="var(--primary)" height={2} showSpinner={false} shadow={false} />
         <TooltipProvider>
           <Toaster>{children}</Toaster>
         </TooltipProvider>

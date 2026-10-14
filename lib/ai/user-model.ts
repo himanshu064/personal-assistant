@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { aiKeys, user, userSettings } from "@/db/schema";
 import { decrypt } from "@/lib/crypto";
-import { resolveModelChoice } from "./models";
+import { MODEL_CATALOG, resolveModelChoice } from "./models";
 import type { AiProvider } from "./providers";
 
 export type DraftContext = {
@@ -15,6 +15,8 @@ export type DraftContext = {
   defaultLeadMinutes: number;
   /** The model the user picked, built with their own key; null without a key for that provider. */
   model: LanguageModel | null;
+  /** The cheapest model of the same provider and key, for background work such as project memory. */
+  cheapModel: LanguageModel | null;
 };
 
 /**
@@ -41,11 +43,13 @@ export async function getDraftContext(userId: string): Promise<DraftContext> {
   const first = rows[0];
   const choice = resolveModelChoice({ provider: first?.provider ?? null, model: first?.model ?? null });
   const key = rows.find((r) => r.keyProvider === choice.provider)?.encryptedKey;
+  const apiKey = key ? decrypt(key) : null;
 
   return {
     timezone: first?.timezone ?? null,
     defaultLeadMinutes: first?.defaultLeadMinutes ?? 0,
-    model: key ? buildModel(choice.provider, decrypt(key), choice.model) : null,
+    model: apiKey ? buildModel(choice.provider, apiKey, choice.model) : null,
+    cheapModel: apiKey ? buildModel(choice.provider, apiKey, MODEL_CATALOG.providers[choice.provider].defaultModel) : null,
   };
 }
 

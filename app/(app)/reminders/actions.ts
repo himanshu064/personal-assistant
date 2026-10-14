@@ -95,7 +95,9 @@ const idSchema = z.uuid();
  * - Changing the time or alert re-arms the reminder (pending, not yet sent).
  * - Only the text changed: status and "sent" stay as they were, so fixing the
  *   title of a done or overdue reminder does not reopen it or send it again.
- * - A time in the past is only accepted when it is the time already saved.
+ * - A time in the past is only accepted when it is the time already saved,
+ *   and then nothing is re-armed (changing only the alert of an overdue
+ *   reminder must not send a late push).
  */
 export async function updateReminder(id: unknown, input: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
@@ -108,7 +110,9 @@ export async function updateReminder(id: unknown, input: unknown): Promise<{ ok:
   const inPast = times.remindAt.getTime() < Date.now() - SAVE_GRACE_MS;
   const remindAtIso = times.remindAt.toISOString();
 
-  const timeChanged = sql`(date_trunc('minute', ${reminders.remindAt}) <> ${remindAtIso}::timestamptz or ${reminders.leadMinutes} <> ${parsed.data.leadMinutes})`;
+  const timeChanged = inPast
+    ? sql`false`
+    : sql`(date_trunc('minute', ${reminders.remindAt}) <> ${remindAtIso}::timestamptz or ${reminders.leadMinutes} <> ${parsed.data.leadMinutes})`;
   const updated = await db
     .update(reminders)
     .set({

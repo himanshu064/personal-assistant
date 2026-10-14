@@ -25,7 +25,7 @@ export interface PushState {
   /**
    * An iPhone or iPad in a Safari tab. Safari only exposes PushManager to a
    * Home Screen web app, so here `isSupported` is false for a reason the
-   * user can fix , install the app , and the UI should say so rather than
+   * user can fix (install the app), and the UI should say so rather than
    * "not supported".
    */
   needsHomeScreenInstall: boolean;
@@ -130,17 +130,17 @@ function initialise() {
 
       // Permission still granted but the subscription is gone: the push
       // service retired the endpoint, or iOS revoked it. Re-subscribing needs
-      // no prompt and no tap once permission is granted , WebKit's
+      // no prompt and no tap once permission is granted: WebKit's
       // PushManager::subscribe only demands a user gesture while permission is
-      // still "default" , so do it here rather than showing the bell "off"
+      // still "default". So do it here rather than showing the bell "off"
       // and waiting for a tap. Should it fail anyway, it fails quietly and the
       // bell stays off for the user to tap, exactly as before.
       if (!sub) return subscribe({ quiet: true });
 
-      // Permission granted AND a local subscription object exists , but that
+      // Permission granted AND a local subscription object exists, but that
       // object only means the BROWSER still thinks it's subscribed. If our
       // own server discovered this endpoint is dead (a 404/410 on an actual
-      // send, see pushToUser() in lib/push/service.ts), nothing tells the browser that happened ,
+      // send, see pushToDevices() in lib/push/service.ts), nothing tells the browser that happened:
       // pushManager.getSubscription() keeps returning the same useless
       // object forever, so the `!sub` repair above never fires for this case.
       // Ask the server directly, and if it agrees the endpoint is dead,
@@ -158,7 +158,7 @@ function initialise() {
         await sub.unsubscribe().catch(() => undefined);
         return subscribe({ quiet: true });
       } catch {
-        // A failed check is not evidence the endpoint is dead , do nothing
+        // A failed check is not evidence the endpoint is dead; do nothing
         // rather than force an unsubscribe/resubscribe over a flaky network.
       }
     })
@@ -174,7 +174,7 @@ async function subscribe({ quiet = false }: { quiet?: boolean } = {}) {
   setSnapshot({ busy: true });
   try {
     // Only prompt when there is something to decide. Once granted, a prompt
-    // is pointless , and on iOS it is the prompt, not subscribe(), that needs
+    // is pointless, and on iOS it is the prompt, not subscribe(), that needs
     // a user gesture, so the on-open repair must not ask.
     const result =
       Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
@@ -205,7 +205,7 @@ async function subscribe({ quiet = false }: { quiet?: boolean } = {}) {
     });
     if (!saved.ok) {
       // The server will never push to this endpoint, so the browser must not
-      // keep it either , or the bell says "on" and nothing ever arrives.
+      // keep it either, or the bell says "on" and nothing ever arrives.
       await sub.unsubscribe().catch(() => undefined);
       const { error } = await saved.json().catch(() => ({ error: null }));
       throw new Error(typeof error === 'string' ? error : 'Could not save the subscription');

@@ -6,3 +6,5 @@ export const reminderStatusEnum = pgEnum("reminder_status", ["pending", "done", 
 
 /** Where a reminder came from: spoken, typed, or (Phase 3) a Gmail suggestion. */
 export const reminderSourceEnum = pgEnum("reminder_source", ["voice", "text", "gmail"]);
+
+export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);

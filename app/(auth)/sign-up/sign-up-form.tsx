@@ -38,7 +38,7 @@ export function SignUpForm() {
   return (
     <AuthCard
       title="Create your account"
-      description="Reminders, inbox and project notes, all by voice."
+      description="Reminders, inbox and project chats, all by voice."
       footer={
         <span>
           Already have an account?{" "}

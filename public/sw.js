@@ -89,13 +89,19 @@ self.addEventListener("notificationclick", (event) => {
   const target = data.url || "/reminders";
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
+    (async () => {
+      const clientList = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of clientList) {
-        if ("focus" in client) {
-          return client.navigate(target).then((c) => (c ? c.focus() : client.focus()));
+        if (!("focus" in client)) continue;
+        try {
+          // navigate() fails for a tab this worker does not control; fall through to a new window.
+          const navigated = await client.navigate(target);
+          return (navigated || client).focus();
+        } catch {
+          break;
         }
       }
       return self.clients.openWindow(target);
-    }),
+    })(),
   );
 });

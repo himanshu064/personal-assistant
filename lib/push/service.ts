@@ -1,6 +1,6 @@
 import "server-only";
 import webpush from "web-push";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { pushSubscriptions } from "@/db/schema";
 
@@ -71,17 +71,32 @@ export type PushPayload = {
   url: string;
 };
 
+export type PushDevice = { id: string; userId: string; endpoint: string; p256dh: string; auth: string };
+
+/** Active devices of several users in ONE query (the cron sends many reminders per run). */
+export async function activeDevicesOf(userIds: string[]): Promise<Map<string, PushDevice[]>> {
+  const byUser = new Map<string, PushDevice[]>();
+  if (userIds.length === 0) return byUser;
+  const rows = await db
+    .select({
+      id: pushSubscriptions.id,
+      userId: pushSubscriptions.userId,
+      endpoint: pushSubscriptions.endpoint,
+      p256dh: pushSubscriptions.p256dh,
+      auth: pushSubscriptions.auth,
+    })
+    .from(pushSubscriptions)
+    .where(and(inArray(pushSubscriptions.userId, userIds), eq(pushSubscriptions.isActive, true)));
+  for (const row of rows) byUser.set(row.userId, [...(byUser.get(row.userId) ?? []), row]);
+  return byUser;
+}
+
 /**
- * Sends to every active device of a user and returns how many received it.
+ * Sends to the given devices and returns how many received it.
  * Never throws: one failed device must not stop the others, or the cron.
  */
-export async function pushToUser(userId: string, payload: PushPayload, ttlSeconds: number): Promise<number> {
-  if (!ensureConfigured()) return 0;
-
-  const subs = await db
-    .select({ id: pushSubscriptions.id, endpoint: pushSubscriptions.endpoint, p256dh: pushSubscriptions.p256dh, auth: pushSubscriptions.auth })
-    .from(pushSubscriptions)
-    .where(and(eq(pushSubscriptions.userId, userId), eq(pushSubscriptions.isActive, true)));
+export async function pushToDevices(subs: PushDevice[], payload: PushPayload, ttlSeconds: number): Promise<number> {
+  if (subs.length === 0 || !ensureConfigured()) return 0;
 
   const results = await Promise.all(
     subs.map(async (sub) => {

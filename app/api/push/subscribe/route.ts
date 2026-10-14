@@ -3,9 +3,25 @@ import { z } from "zod";
 import { saveSubscription } from "@/lib/push/service";
 import { getSession } from "@/lib/session";
 
+/**
+ * The server later POSTs to the endpoint, so only the browser push services
+ * are accepted (https, known hosts). Otherwise anyone could make the server
+ * send requests to an address of their choice.
+ */
+const PUSH_HOSTS = [/^fcm\.googleapis\.com$/, /(^|\.)push\.apple\.com$/, /(^|\.)push\.services\.mozilla\.com$/, /(^|\.)notify\.windows\.com$/];
+
+function isPushServiceUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && PUSH_HOSTS.some((host) => host.test(url.hostname));
+  } catch {
+    return false;
+  }
+}
+
 const schema = z.object({
-  endpoint: z.url(),
-  keys: z.object({ p256dh: z.string().min(1), auth: z.string().min(1) }),
+  endpoint: z.url().max(1000).refine(isPushServiceUrl, "Not a browser push service"),
+  keys: z.object({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
 });
 
 export async function POST(req: NextRequest) {

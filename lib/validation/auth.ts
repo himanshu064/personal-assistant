@@ -26,8 +26,12 @@ export const resetPasswordSchema = z
 
 export type ResetPasswordValues = z.infer<typeof resetPasswordSchema>;
 
-/** Only allow redirects to paths inside this app, never to other sites. */
+/**
+ * Only allow redirects to paths inside this app, never to other sites.
+ * Browsers read "/\evil.com" like "//evil.com" (another site), and strip tabs
+ * and line breaks inside URLs, so those are refused too.
+ */
 export function safeRedirect(path: string | null | undefined, fallback = "/home"): string {
-  if (!path || !path.startsWith("/") || path.startsWith("//")) return fallback;
+  if (!path || !path.startsWith("/") || /^\/[/\\]/.test(path) || /[\\\u0000-\u001f]/.test(path)) return fallback;
   return path;
 }

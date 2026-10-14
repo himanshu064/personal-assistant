@@ -90,7 +90,13 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
 
     recognitionRef.current = recognition;
     setListening(true);
-    recognition.start();
+    try {
+      recognition.start();
+    } catch {
+      recognitionRef.current = null;
+      setListening(false);
+      setError("Voice input could not start. Try again or type instead.");
+    }
   }, []);
 
   const stop = useCallback(() => recognitionRef.current?.stop(), []);

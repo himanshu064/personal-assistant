@@ -10,7 +10,7 @@ export const SITE_NAME = "Personal Assistant";
 export const SITE_SHORT_NAME = "Assistant";
 
 export const SITE_DESCRIPTION =
-  "Your AI voice assistant for reminders, email follow-ups and project notes.";
+  "Your AI voice assistant for reminders, email follow-ups and project chats.";
 
 export const SITE_TAGLINE = "Speak it. We'll remember it.";
 

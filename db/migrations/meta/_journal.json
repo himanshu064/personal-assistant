@@ -22,6 +22,20 @@
       "when": 1791963156374,
       "tag": "0002_needy_unus",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791970404403,
+      "tag": "0003_demonic_hellion",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791973024182,
+      "tag": "0004_drop_rag_add_project_memory",
+      "breakpoints": true
     }
   ]
 }

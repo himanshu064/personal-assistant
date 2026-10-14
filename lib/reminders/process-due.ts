@@ -4,7 +4,7 @@ import { revalidateTag } from "next/cache";
 import { db } from "@/db";
 import { reminders } from "@/db/schema";
 import { remindersTag } from "@/lib/data/reminders";
-import { pushToUser } from "@/lib/push/service";
+import { activeDevicesOf, pushToDevices } from "@/lib/push/service";
 import { formatClockTime } from "@/lib/time";
 
 /** Reminders handled per cron run; the rest wait for the next run. */
@@ -59,12 +59,15 @@ export async function processDueReminders() {
     .from(reminders)
     .where(inArray(reminders.id, ids));
 
+  // Every user's devices in one query, not one query per reminder.
+  const devices = await activeDevicesOf([...new Set(rows.map((r) => r.userId))]);
+
   const delivered: string[] = [];
   await Promise.all(
     rows.map(async (r) => {
       const at = formatClockTime(r.remindAt, r.timezone);
-      const count = await pushToUser(
-        r.userId,
+      const count = await pushToDevices(
+        devices.get(r.userId) ?? [],
         {
           type: "reminder",
           title: r.title,

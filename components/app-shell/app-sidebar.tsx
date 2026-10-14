@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import {
   Sidebar,
@@ -18,24 +17,23 @@ import {
 } from "@/components/ui/sidebar";
 import { NAV_ITEMS, isActive, type NavItem } from "@/lib/constants/nav";
 import { CommandSearch } from "./command-search";
-import { LinkPending } from "@/components/common/link-pending";
+import { useOptimisticPathname } from "@/hooks/use-optimistic-pathname";
 
 // Active item: a white pill with a hairline border, as in the reference shots.
 const itemClass =
   "h-10 rounded-xl px-3 text-[15px] font-normal text-foreground/80 hover:bg-white/70 data-active:bg-white data-active:font-normal data-active:text-foreground data-active:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.04)] [&_svg]:size-[18px]";
 
-function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate: (href: string) => React.MouseEventHandler }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={isActive(pathname, item.href)}
         tooltip={item.label}
         className={itemClass}
-        render={<Link href={item.href} />}
+        render={<Link href={item.href} onClick={onNavigate(item.href)} />}
       >
         <item.icon strokeWidth={1.5} />
         <span>{item.label}</span>
-        <LinkPending className="ml-auto" />
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
@@ -46,7 +44,8 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
  * sections. Phones use the bottom tab bar instead.
  */
 export function AppSidebar({ account }: { account: ReactNode }) {
-  const pathname = usePathname();
+  // Highlight the clicked item at once; the top progress bar shows the page loading.
+  const { href: pathname, onNavigate } = useOptimisticPathname();
   const essentials = NAV_ITEMS.filter((i) => i.href !== "/settings");
   const settings = NAV_ITEMS.filter((i) => i.href === "/settings");
 
@@ -62,7 +61,7 @@ export function AppSidebar({ account }: { account: ReactNode }) {
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {essentials.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} />
+                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -73,7 +72,7 @@ export function AppSidebar({ account }: { account: ReactNode }) {
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {settings.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} />
+                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
