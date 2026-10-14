@@ -1,0 +1,16 @@
+import { BellIcon, FolderIcon, HouseIcon, InboxIcon, SettingsIcon, type LucideIcon } from "lucide-react";
+
+export type NavItem = { href: string; label: string; icon: LucideIcon };
+
+/** The five main sections, shared by the desktop sidebar and the phone tab bar. */
+export const NAV_ITEMS: NavItem[] = [
+  { href: "/", label: "Home", icon: HouseIcon },
+  { href: "/reminders", label: "Reminders", icon: BellIcon },
+  { href: "/inbox", label: "Inbox", icon: InboxIcon },
+  { href: "/projects", label: "Projects", icon: FolderIcon },
+  { href: "/settings", label: "Settings", icon: SettingsIcon },
+];
+
+export function isActive(pathname: string, href: string) {
+  return href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`);
+}

@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Third party agent skills, not app code.
+    ".claude/**",
+    // react-email preview build.
+    ".react-email/**",
   ]),
 ]);
 

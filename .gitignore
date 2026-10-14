@@ -43,3 +43,5 @@ next-env.d.ts
 
 # Claude folder
 .claude
+# react-email preview build
+/.react-email

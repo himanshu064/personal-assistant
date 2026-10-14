@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791955315843,
-      "tag": "0000_mute_husk",
+      "when": 1791961970998,
+      "tag": "0000_optimal_sage",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791961979232,
+      "tag": "0001_enable_pgvector",
       "breakpoints": true
     }
   ]

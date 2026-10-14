@@ -18,8 +18,9 @@ const client =
   globalForDb.pgClient ??
   postgres(connectionString, {
     max: 10,
-    // Set to false if connecting through a transaction pooler (e.g. PgBouncer / Supabase :6543).
-    prepare: true,
+    // Neon's pooled URL runs PgBouncer in transaction mode, which does not
+    // support prepared statements across pooled connections.
+    prepare: false,
     connect_timeout: 15,
     idle_timeout: 20,
     connection: {

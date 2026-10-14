@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Toaster } from "@/components/ui/toast";
+import { SITE_DESCRIPTION, SITE_NAME, SITE_SHORT_NAME, THEME_COLOR } from "@/lib/constants/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -14,8 +16,18 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Personal Assistant",
-  description: "AI voice personal assistant",
+  title: { default: SITE_NAME, template: `%s | ${SITE_NAME}` },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  // Lets iOS open the home screen app full screen, which iOS push requires.
+  appleWebApp: { capable: true, title: SITE_SHORT_NAME, statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: THEME_COLOR,
+  // Lets content use the full screen on notched phones; the tab bar adds
+  // safe-area padding itself.
+  viewportFit: "cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -25,7 +37,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <Toaster>{children}</Toaster>
+        </TooltipProvider>
       </body>
     </html>
   );

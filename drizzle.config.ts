@@ -8,6 +8,7 @@ export default defineConfig({
   out: "./db/migrations",
   dialect: "postgresql",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    // Migrations need a direct connection, not the pooled one.
+    url: process.env.DATABASE_URL_UNPOOLED!,
   },
 });
