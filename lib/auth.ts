@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { nextCookies } from "better-auth/next-js";
 import { after } from "next/server";
 import { db } from "@/db";
@@ -57,6 +58,45 @@ export const auth = betterAuth({
       });
     },
   },
+  /**
+   * Google is only used to LINK Gmail to an account that signed up with email
+   * and password (decided: no "Sign in with Google"). Sign up through Google
+   * is off, and signing in with it is blocked in hooks.before below.
+   */
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID ?? "",
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+      // Always return a refresh token, so syncing works while the user is away.
+      accessType: "offline",
+      prompt: "consent",
+      disableSignUp: true,
+    },
+  },
+  account: {
+    // Gmail tokens are stored encrypted.
+    encryptOAuthTokens: true,
+    accountLinking: {
+      // The Gmail address may differ from the sign in email. Safe here because
+      // Google can never be used to sign in (see hooks.before).
+      allowDifferentEmails: true,
+    },
+  },
+  hooks: {
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path === "/sign-in/social" || ctx.path === "/sign-in/oauth2") {
+        throw new APIError("FORBIDDEN", { message: "Sign in with your email and password." });
+      }
+    }),
+  },
+  databaseHooks: {
+    account: {
+      // Linking (or relinking) Gmail: start tracking it and run the first sync.
+      // Only on the OAuth callback; token refreshes also update the account row.
+      create: { after: async (row, ctx) => onGoogleLinked(row, ctx?.path) },
+      update: { after: async (row, ctx) => onGoogleLinked(row, ctx?.path) },
+    },
+  },
   session: {
     // Read the session from a signed cookie for 5 minutes instead of hitting
     // the database on every request.
@@ -77,3 +117,11 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
+
+/** Called after Better Auth saves a linked account; see databaseHooks above. */
+async function onGoogleLinked(row: { id?: string; userId?: string; providerId?: string; scope?: string | null }, path: string | undefined) {
+  if (row.providerId !== "google" || !row.id || !row.userId || !path?.startsWith("/callback/")) return;
+  // Imported here: the Gmail code itself uses `auth` to get access tokens.
+  const { onGmailLinked } = await import("@/lib/gmail/connection");
+  await onGmailLinked({ userId: row.userId, accountId: row.id, scope: row.scope ?? "" });
+}

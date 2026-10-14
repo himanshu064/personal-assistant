@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // Development only: lets the dev server be opened as 127.0.0.1 (a second
+  // test session beside localhost) and from a phone on the same network.
+  allowedDevOrigins: ["127.0.0.1", "192.168.*.*"],
   turbopack: {
     rules: {
       "*.css": {

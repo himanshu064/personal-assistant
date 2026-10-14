@@ -36,6 +36,20 @@
       "when": 1791973024182,
       "tag": "0004_drop_rag_add_project_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791975669012,
+      "tag": "0005_gmail",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791976968407,
+      "tag": "0006_email_items_event_uid",
+      "breakpoints": true
     }
   ]
 }

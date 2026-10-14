@@ -5,3 +5,4 @@ export * from "./ai-keys";
 export * from "./push-subscriptions";
 export * from "./reminders";
 export * from "./projects";
+export * from "./gmail";

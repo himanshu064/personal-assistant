@@ -41,11 +41,16 @@ Do not run `pnpm build` while `pnpm dev` is running; they share the `.next` fold
 
 ## Scheduled jobs (after deploying)
 
-Create this job on cron-job.org (or Vercel Cron):
+Create these jobs on cron-job.org (or Vercel Cron):
 
 | Job | Request | Every |
 |---|---|---|
 | Send due reminders | `POST https://<your domain>/api/cron/reminders` with header `x-cron-secret: <CRON_SECRET>` | 5 minutes |
+| Read new Gmail | `POST https://<your domain>/api/cron/gmail-sync` with the same header | 30 minutes |
+
+## Gmail
+
+Gmail needs a Google Cloud project with the Gmail API turned on, an OAuth client (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), and the redirect URI `<your domain>/api/auth/callback/google`. While the app is in Google's Testing mode, only listed test users can connect, and they reconnect every 7 days.
 
 ## Deploying to Vercel
 

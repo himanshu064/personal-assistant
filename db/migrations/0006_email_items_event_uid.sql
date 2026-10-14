@@ -1,0 +1,2 @@
+ALTER TABLE "email_items" ADD COLUMN "event_uid" text;--> statement-breakpoint
+CREATE INDEX "email_items_user_event_idx" ON "email_items" USING btree ("user_id","event_uid") WHERE "email_items"."event_uid" is not null;

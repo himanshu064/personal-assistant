@@ -1,15 +1,16 @@
 "use server";
 
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { generateText } from "ai";
 import { createGoogle } from "@ai-sdk/google";
 import { z } from "zod";
 import { db } from "@/db";
-import { aiKeys, reminders } from "@/db/schema";
+import { aiKeys, emailItems, reminders } from "@/db/schema";
 import { MODEL_CATALOG } from "@/lib/ai/models";
 import { getDraftContext } from "@/lib/ai/user-model";
 import { decrypt } from "@/lib/crypto";
+import { inboxTag } from "@/lib/data/inbox-tags";
 import { remindersTag } from "@/lib/data/reminders";
 import { extractReminderWithAi } from "@/lib/reminders/extract-ai";
 import { parseReminderWithRules } from "@/lib/reminders/parse-rules";
@@ -63,10 +64,16 @@ function toInstants(values: z.output<typeof timedSchema>): { remindAt: Date; not
   return { remindAt, notifyAt: new Date(remindAt.getTime() - values.leadMinutes * 60_000) };
 }
 
-/** One round trip: a single INSERT. */
+/**
+ * One INSERT. From an Inbox suggestion (source "gmail"), one more UPDATE marks
+ * the suggestion as added and links it to the new reminder.
+ */
 export async function createReminder(input: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
-  const parsed = timedSchema.extend({ source: z.enum(["voice", "text"]) }).safeParse(input);
+  const parsed = timedSchema
+    .extend({ source: z.enum(["voice", "text", "gmail"]), emailItemId: z.uuid().optional() })
+    .refine((v) => v.source !== "gmail" || v.emailItemId, "Missing suggestion.")
+    .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Check the highlighted fields." };
 
   const times = toInstants(parsed.data);
@@ -75,16 +82,27 @@ export async function createReminder(input: unknown): Promise<{ ok: true } | Fai
     return { ok: false, error: "That time has already passed. Pick a time in the future.", field: "remindAt" };
   }
 
-  await db.insert(reminders).values({
-    userId: user.id,
-    title: parsed.data.title,
-    notes: parsed.data.notes || null,
-    leadMinutes: parsed.data.leadMinutes,
-    timezone: parsed.data.timezone,
-    source: parsed.data.source,
-    ...times,
-  });
+  const [created] = await db
+    .insert(reminders)
+    .values({
+      userId: user.id,
+      title: parsed.data.title,
+      notes: parsed.data.notes || null,
+      leadMinutes: parsed.data.leadMinutes,
+      timezone: parsed.data.timezone,
+      source: parsed.data.source,
+      ...times,
+    })
+    .returning({ id: reminders.id });
   updateTag(remindersTag(user.id));
+
+  if (parsed.data.emailItemId) {
+    await db
+      .update(emailItems)
+      .set({ status: "added", reminderId: created.id })
+      .where(and(eq(emailItems.id, parsed.data.emailItemId), eq(emailItems.userId, user.id), inArray(emailItems.status, ["new", "dismissed"])));
+    updateTag(inboxTag(user.id));
+  }
   return { ok: true };
 }
 
