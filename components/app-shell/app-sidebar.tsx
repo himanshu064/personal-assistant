@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -23,7 +23,9 @@ import { useOptimisticPathname } from "@/hooks/use-optimistic-pathname";
 const itemClass =
   "h-10 rounded-xl px-3 text-[15px] font-normal text-foreground/80 hover:bg-white/70 data-active:bg-white data-active:font-normal data-active:text-foreground data-active:shadow-[0_0_0_1px_var(--border),0_1px_2px_rgb(0_0_0/0.04)] [&_svg]:size-[18px]";
 
-function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate: (href: string) => React.MouseEventHandler }) {
+type OnNavigate = (href: string) => React.MouseEventHandler | undefined;
+
+function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: string; onNavigate: OnNavigate }) {
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -39,13 +41,37 @@ function NavLink({ item, pathname, onNavigate }: { item: NavItem; pathname: stri
   );
 }
 
+const noHighlight: OnNavigate = () => undefined;
+
+/** The links of one section; pathname "" shows none as active. */
+function NavLinks({ items, pathname, onNavigate }: { items: NavItem[]; pathname: string; onNavigate: OnNavigate }) {
+  return items.map((item) => <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />);
+}
+
+/** Reads the URL to highlight the current page (and the clicked one at once; the top progress bar shows loading). */
+function LiveNavLinks({ items }: { items: NavItem[] }) {
+  const { href, onNavigate } = useOptimisticPathname();
+  return <NavLinks items={items} pathname={href} onNavigate={onNavigate} />;
+}
+
+/**
+ * Only the highlight depends on the URL, so only that part waits behind
+ * Suspense: pages with a dynamic segment (/projects/[projectId]) can still be
+ * prerendered, with the same links shown un-highlighted until it streams in.
+ */
+function SectionLinks({ items }: { items: NavItem[] }) {
+  return (
+    <Suspense fallback={<NavLinks items={items} pathname="" onNavigate={noHighlight} />}>
+      <LiveNavLinks items={items} />
+    </Suspense>
+  );
+}
+
 /**
  * Desktop navigation on the warm grey canvas: account card, search, then
  * sections. Phones use the bottom tab bar instead.
  */
 export function AppSidebar({ account }: { account: ReactNode }) {
-  // Highlight the clicked item at once; the top progress bar shows the page loading.
-  const { href: pathname, onNavigate } = useOptimisticPathname();
   const essentials = NAV_ITEMS.filter((i) => i.href !== "/settings");
   const settings = NAV_ITEMS.filter((i) => i.href === "/settings");
 
@@ -60,9 +86,7 @@ export function AppSidebar({ account }: { account: ReactNode }) {
           <SidebarGroupLabel className="h-9 px-1 text-[15px] font-normal text-foreground">Essentials</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {essentials.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-              ))}
+              <SectionLinks items={essentials} />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -71,9 +95,7 @@ export function AppSidebar({ account }: { account: ReactNode }) {
           <SidebarGroupLabel className="h-9 px-1 text-[15px] font-normal text-foreground">Account</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
-              {settings.map((item) => (
-                <NavLink key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
-              ))}
+              <SectionLinks items={settings} />
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

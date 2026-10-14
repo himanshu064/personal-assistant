@@ -174,7 +174,7 @@ export function InboxView({
           ) : (
             <ul className="flex flex-col gap-2">
               {visible.map((item) => (
-                <li key={item.id}>
+                <li key={item.id} className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
                   <button
                     type="button"
                     onClick={() => select(item.id)}
@@ -301,7 +301,7 @@ function Details({
         </Button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-5">
+      <div className="min-h-0 flex-1 overflow-y-auto p-5 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-200">
         <div className="flex items-start gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-medium" aria-hidden>
             {initials || "?"}

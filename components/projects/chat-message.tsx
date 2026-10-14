@@ -29,14 +29,14 @@ export function ChatMessage({
 
   if (message.role === "user") {
     return (
-      <li className="flex justify-end">
+      <li className="flex justify-end motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-200">
         <p className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 text-[15px] whitespace-pre-wrap">{text}</p>
       </li>
     );
   }
 
   return (
-    <li className="group flex flex-col gap-2">
+    <li className="group flex flex-col gap-2 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
       <Markdown>{text}</Markdown>
       {!streaming && text ? (
         <div className="-ml-2 flex gap-0.5 text-muted-foreground">

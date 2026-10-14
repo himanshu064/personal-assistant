@@ -7,7 +7,6 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { ArrowUpIcon, KeyRoundIcon, MessageSquarePlusIcon, MessagesSquareIcon, MicIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import { cn } from "cn";
-import { EmptyState } from "@/components/common/empty-state";
 import { ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -140,23 +139,6 @@ export function ProjectChat({
     });
   }
 
-  if (!hasKey) {
-    return (
-      <div className="rounded-xl bg-card framed">
-        <EmptyState
-          icon={KeyRoundIcon}
-          title="Add an AI key to use project chats"
-          description="Chats use your own Claude or Gemini key, chosen in Settings."
-          action={
-            <Button size="page" nativeButton={false} render={<Link href="/settings/api-keys" />}>
-              Add a key
-            </Button>
-          }
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
       {/* Chats list: card on desktop, picker on phones. */}
@@ -230,7 +212,7 @@ export function ProjectChat({
                   this project, so you can ask about it any time.
                 </p>
               </div>
-              {hasMemory ? (
+              {hasMemory && hasKey ? (
                 <ul className="flex flex-wrap justify-center gap-2">
                   {SUGGESTIONS.map((s) => (
                     <li key={s}>
@@ -251,7 +233,7 @@ export function ProjectChat({
                     key={m.id}
                     message={m}
                     streaming={last && status === "streaming"}
-                    onRetry={last && m.role === "assistant" && !busy ? () => void regenerate({ body: { threadId: threadRef.current } }) : undefined}
+                    onRetry={last && m.role === "assistant" && !busy && hasKey ? () => void regenerate({ body: { threadId: threadRef.current } }) : undefined}
                   />
                 );
               })}
@@ -274,51 +256,62 @@ export function ProjectChat({
           )}
         </div>
 
-        <form
-          className="border-t p-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send(input);
-          }}
-        >
-          <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border bg-background p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
-            <Textarea
-              value={speech.listening && speech.transcript ? `${input} ${speech.transcript}`.trim() : input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  send(input);
-                }
-              }}
-              placeholder="Say or type something about this project"
-              aria-label="Message"
-              rows={1}
-              className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
-            />
-            {speech.supported ? (
-              <Button
-                type="button"
-                variant={speech.listening ? "destructive" : "ghost"}
-                size="icon-lg"
-                aria-label={speech.listening ? "Stop dictation" : "Dictate"}
-                onClick={() => (speech.listening ? speech.stop() : speech.start())}
-              >
-                {speech.listening ? <SquareIcon className="fill-current" /> : <MicIcon strokeWidth={1.5} />}
-              </Button>
-            ) : null}
-            {busy ? (
-              <Button type="button" size="icon-lg" variant="outline" aria-label="Stop answering" onClick={() => void stop()}>
-                <SquareIcon className="fill-current" />
-              </Button>
-            ) : (
-              <Button type="submit" size="icon-lg" aria-label="Send" disabled={!input.trim()}>
-                <ArrowUpIcon />
-              </Button>
-            )}
+        {hasKey ? (
+          <form
+            className="border-t p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send(input);
+            }}
+          >
+            <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border bg-background p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
+              <Textarea
+                value={speech.listening && speech.transcript ? `${input} ${speech.transcript}`.trim() : input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    send(input);
+                  }
+                }}
+                placeholder="Say or type something about this project"
+                aria-label="Message"
+                rows={1}
+                className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
+              />
+              {speech.supported ? (
+                <Button
+                  type="button"
+                  variant={speech.listening ? "destructive" : "ghost"}
+                  size="icon-lg"
+                  aria-label={speech.listening ? "Stop dictation" : "Dictate"}
+                  onClick={() => (speech.listening ? speech.stop() : speech.start())}
+                >
+                  {speech.listening ? <SquareIcon className="fill-current" /> : <MicIcon strokeWidth={1.5} />}
+                </Button>
+              ) : null}
+              {busy ? (
+                <Button type="button" size="icon-lg" variant="outline" aria-label="Stop answering" onClick={() => void stop()}>
+                  <SquareIcon className="fill-current" />
+                </Button>
+              ) : (
+                <Button type="submit" size="icon-lg" aria-label="Send" disabled={!input.trim()}>
+                  <ArrowUpIcon />
+                </Button>
+              )}
+            </div>
+            {speech.error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-destructive">{speech.error}</p> : null}
+          </form>
+        ) : (
+          // Without a key, saved chats stay readable; only sending needs one.
+          <div className="flex flex-col items-start gap-3 border-t p-4 sm:flex-row sm:items-center">
+            <KeyRoundIcon className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+            <p className="flex-1 text-sm text-muted-foreground">Add your Claude or Gemini key in Settings to send messages.</p>
+            <Button size="page" nativeButton={false} render={<Link href="/settings/api-keys" />}>
+              Add a key
+            </Button>
           </div>
-          {speech.error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-destructive">{speech.error}</p> : null}
-        </form>
+        )}
       </div>
       <ResponsiveModal
         open={confirmDelete !== null}

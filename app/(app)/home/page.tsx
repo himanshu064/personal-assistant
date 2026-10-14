@@ -102,8 +102,9 @@ async function Stats() {
     { title: "Done this week", value: stats.doneThisWeek, hint: "Marked done in the last 7 days", icon: CircleCheckIcon },
   ];
 
+  // Two per row even on phones, so Quick capture is not pushed far down the screen.
   return (
-    <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
       {cards.map((c) => (
         <Card key={c.title} size="sm">
           <CardHeader>
@@ -189,7 +190,7 @@ async function UpNext() {
 
 function StatsSkeleton() {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-5 xl:grid-cols-4">
       {Array.from({ length: 4 }, (_, i) => (
         <Skeleton key={i} className="h-28 rounded-xl" />
       ))}
