@@ -4,7 +4,8 @@ import { and, eq } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db } from "@/db";
 import { aiKeys, userSettings } from "@/db/schema";
-import { isAllowedModel } from "@/lib/ai/models";
+import { isAllowedModel, MODEL_CATALOG, resolveModelChoice } from "@/lib/ai/models";
+import { PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
 import { verifyApiKey } from "@/lib/ai/verify-key";
 import { encrypt } from "@/lib/crypto";
 import { settingsTag } from "@/lib/data/settings";
@@ -69,8 +70,9 @@ export async function saveApiKey(input: unknown): Promise<ActionResult> {
     .values({ userId: user.id, provider, encryptedKey, last4 })
     .onConflictDoUpdate({ target: [aiKeys.userId, aiKeys.provider], set: { encryptedKey, last4 } });
 
+  const switched = await switchToProviderWithKey(user.id, provider);
   updateTag(settingsTag(user.id));
-  return { ok: true, message: "Key checked and saved." };
+  return { ok: true, message: `Key checked and saved.${switchedMessage(switched)}` };
 }
 
 export async function deleteApiKey(input: unknown): Promise<ActionResult> {
@@ -78,7 +80,36 @@ export async function deleteApiKey(input: unknown): Promise<ActionResult> {
   const parsed = providerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Unknown provider." };
 
-  await db.delete(aiKeys).where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, parsed.data.provider)));
+  const { provider } = parsed.data;
+  await db.delete(aiKeys).where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, provider)));
+  const switched = await switchToProviderWithKey(user.id, provider === "anthropic" ? "google" : "anthropic");
   updateTag(settingsTag(user.id));
-  return { ok: true, message: "Key removed." };
+  return { ok: true, message: `Key removed.${switchedMessage(switched)}` };
+}
+
+/**
+ * Every AI feature uses only the key of the selected provider, so a key for
+ * the other one does nothing on its own. When the selected provider has no
+ * key and `candidate` has one, select `candidate` with its cheapest model.
+ * Returns the provider switched to, or null when nothing changed.
+ */
+async function switchToProviderWithKey(userId: string, candidate: AiProvider): Promise<AiProvider | null> {
+  const [settingsRows, keyRows] = await Promise.all([
+    db.select({ provider: userSettings.provider, model: userSettings.model }).from(userSettings).where(eq(userSettings.userId, userId)),
+    db.select({ provider: aiKeys.provider }).from(aiKeys).where(eq(aiKeys.userId, userId)),
+  ]);
+  const withKey = new Set(keyRows.map((r) => r.provider));
+  const selected = resolveModelChoice({ provider: settingsRows[0]?.provider ?? null, model: settingsRows[0]?.model ?? null }).provider;
+  if (withKey.has(selected) || !withKey.has(candidate)) return null;
+
+  const model = MODEL_CATALOG.providers[candidate].defaultModel;
+  await db
+    .insert(userSettings)
+    .values({ userId, provider: candidate, model })
+    .onConflictDoUpdate({ target: userSettings.userId, set: { provider: candidate, model } });
+  return candidate;
+}
+
+function switchedMessage(provider: AiProvider | null) {
+  return provider ? ` ${PROVIDER_LABELS[provider]} is now your AI provider.` : "";
 }

@@ -18,6 +18,9 @@ export async function verifyApiKey(provider: AiProvider, apiKey: string): Promis
     return { ok: true };
   } catch (error) {
     const status = APICallError.isInstance(error) ? error.statusCode : undefined;
+    if (status === 400 && APICallError.isInstance(error) && /not scoped to a workspace/i.test(error.responseBody ?? error.message)) {
+      return { ok: false, message: "This key isn't tied to a workspace. Create a key inside a workspace in the Anthropic Console and use that one." };
+    }
     if (status === 400 || status === 401 || status === 403) {
       return { ok: false, message: "This key was rejected. Check that you copied all of it." };
     }

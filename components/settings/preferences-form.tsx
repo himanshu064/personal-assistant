@@ -122,7 +122,8 @@ export function PreferencesForm({
               </NativeSelect>
               {hasKeyForProvider ? null : (
                 <FieldDescription>
-                  Add a {PROVIDER_LABELS[provider]} key in{" "}
+                  {savedProviders.length > 0 ? `You have a ${PROVIDER_LABELS[savedProviders[0]]} key. Choose it here, or add` : "Add"} a{" "}
+                  {PROVIDER_LABELS[provider]} key in{" "}
                   <Link href="/settings/api-keys" className="font-medium text-foreground underline underline-offset-4">
                     AI keys
                   </Link>{" "}
