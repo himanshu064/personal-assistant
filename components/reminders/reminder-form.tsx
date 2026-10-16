@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { SparklesIcon } from "lucide-react";
 import { FormError } from "@/components/auth/form-error";
 import { FormField } from "@/components/auth/form-field";
+import { ModalBody, ModalFooter, modalFormClass } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -31,6 +32,7 @@ export function ReminderForm({
   defaultValues,
   timezone,
   heard,
+  intro,
   via,
   submitLabel,
   onSubmit,
@@ -40,6 +42,8 @@ export function ReminderForm({
   timezone: string;
   /** What the user said, shown above the fields so they can compare. */
   heard?: string;
+  /** A line above the fields, inside the scrolling body. */
+  intro?: string;
   via?: "ai" | "rules";
   submitLabel: string;
   onSubmit: (values: ReminderFormValues) => Promise<ReminderFormResult>;
@@ -70,7 +74,10 @@ export function ReminderForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(submit)} noValidate className="flex flex-col gap-4">
+    // Inside a ResponsiveModal: the fields scroll, the buttons stay in the fixed footer.
+    <form onSubmit={handleSubmit(submit)} noValidate className={modalFormClass}>
+      <ModalBody>
+      {intro ? <p className="text-[15px] text-muted-foreground">{intro}</p> : null}
       {heard ? (
         <div className="rounded-lg bg-muted/60 px-3 py-2 text-sm">
           <span className="text-muted-foreground">You said: </span>
@@ -145,8 +152,9 @@ export function ReminderForm({
       ) : null}
 
       <FormError message={errors.root?.message} />
+      </ModalBody>
 
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      <ModalFooter>
         <Button type="button" variant="ghost" size="page" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
@@ -154,7 +162,7 @@ export function ReminderForm({
           {isSubmitting ? <Spinner /> : null}
           {submitLabel}
         </Button>
-      </div>
+      </ModalFooter>
     </form>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
-import { ResponsiveModal } from "@/components/common/responsive-modal";
+import { ModalFooter, ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -67,7 +67,7 @@ export function ProjectMenu({ project }: { project: { id: string; name: string; 
         title="Delete this project?"
         description={`“${project.name}”, its chats and its memory will be deleted. This cannot be undone.`}
       >
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <ModalFooter>
           <Button variant="ghost" size="page" onClick={() => setConfirming(false)} disabled={deleting}>
             Keep it
           </Button>
@@ -87,7 +87,7 @@ export function ProjectMenu({ project }: { project: { id: string; name: string; 
             {deleting ? <Spinner /> : <Trash2Icon strokeWidth={1.5} />}
             Delete project
           </Button>
-        </div>
+        </ModalFooter>
       </ResponsiveModal>
     </>
   );

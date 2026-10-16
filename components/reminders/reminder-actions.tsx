@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { AlarmClockIcon, CheckIcon, MoreHorizontalIcon, PencilIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
-import { ResponsiveModal } from "@/components/common/responsive-modal";
+import { ModalFooter, ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -101,7 +101,7 @@ export function ReminderActions({ reminder, onEdit }: { reminder: ReminderRow; o
         title="Delete this reminder?"
         description={`\u201c${reminder.title}\u201d will be deleted. This cannot be undone.`}
       >
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <ModalFooter>
           <Button variant="ghost" size="page" onClick={() => setConfirmingDelete(false)}>
             Keep it
           </Button>
@@ -116,7 +116,7 @@ export function ReminderActions({ reminder, onEdit }: { reminder: ReminderRow; o
             <Trash2Icon strokeWidth={1.5} />
             Delete reminder
           </Button>
-        </div>
+        </ModalFooter>
       </ResponsiveModal>
     </>
   );

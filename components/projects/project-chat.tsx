@@ -18,7 +18,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { cn } from "cn";
-import { ResponsiveModal } from "@/components/common/responsive-modal";
+import { ModalBody, ModalFooter, ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -459,7 +459,7 @@ export function ProjectChat({
         title="Delete this chat?"
         description={projectId ? "Its messages are deleted. Facts already in the project memory stay there." : "Its messages are deleted."}
       >
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <ModalFooter>
           <Button variant="ghost" size="page" onClick={() => setConfirmDelete(null)} disabled={deleting}>
             Keep it
           </Button>
@@ -467,7 +467,7 @@ export function ProjectChat({
             {deleting ? <Spinner /> : <Trash2Icon strokeWidth={1.5} />}
             Delete chat
           </Button>
-        </div>
+        </ModalFooter>
       </ResponsiveModal>
       <ResponsiveModal
         open={moving !== null}
@@ -475,7 +475,7 @@ export function ProjectChat({
         title="Move chat"
         description={moving ? `"${moving.title}"` : undefined}
       >
-        <div className="flex flex-col gap-4">
+        <ModalBody>
           <NativeSelect aria-label="Move to" className="w-full" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
             {destinations.map((d) => (
               <NativeSelectOption key={d.id || "chat"} value={d.id}>
@@ -484,16 +484,16 @@ export function ProjectChat({
             ))}
           </NativeSelect>
           {moveTo ? <p className="text-sm text-muted-foreground">What this chat says is added to the project&apos;s memory, so its other chats know it too.</p> : null}
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="ghost" size="page" onClick={() => setMoving(null)} disabled={movePending}>
-              Cancel
-            </Button>
-            <Button size="page" onClick={move} disabled={movePending}>
-              {movePending ? <Spinner /> : <FolderInputIcon strokeWidth={1.5} />}
-              Move
-            </Button>
-          </div>
-        </div>
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="ghost" size="page" onClick={() => setMoving(null)} disabled={movePending}>
+            Cancel
+          </Button>
+          <Button size="page" onClick={move} disabled={movePending}>
+            {movePending ? <Spinner /> : <FolderInputIcon strokeWidth={1.5} />}
+            Move
+          </Button>
+        </ModalFooter>
       </ResponsiveModal>
     </div>
   );

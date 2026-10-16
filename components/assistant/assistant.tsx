@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { browserTimezone, ReminderPreview, type Preview } from "@/components/reminders/new-reminder";
+import { ModalBody } from "@/components/common/responsive-modal";
 import { VoiceCapture } from "@/components/reminders/voice-capture";
 import { askAssistant } from "@/app/(app)/assistant/actions";
 import { deleteReminder } from "@/app/(app)/reminders/actions";
@@ -66,15 +67,11 @@ export function Assistant({ onDone }: { onDone: () => void }) {
   }
 
   if (step.kind === "reminder") {
-    return (
-      <div className="flex flex-col gap-4">
-        <ReminderPreview preview={step.preview} onCancel={() => setStep({ kind: "listen" })} onSaved={onDone} />
-      </div>
-    );
+    return <ReminderPreview preview={step.preview} onCancel={() => setStep({ kind: "listen" })} onSaved={onDone} />;
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <ModalBody>
       <VoiceCapture
         onText={handleText}
         busy={working}
@@ -87,6 +84,6 @@ export function Assistant({ onDone }: { onDone: () => void }) {
           {error}
         </p>
       ) : null}
-    </div>
+    </ModalBody>
   );
 }

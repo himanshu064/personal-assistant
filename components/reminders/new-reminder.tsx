@@ -5,6 +5,7 @@ import { toast } from "@/components/ui/toast";
 import { createReminder, draftReminder } from "@/app/(app)/reminders/actions";
 import type { ReminderDraft } from "@/lib/validation/reminders";
 import { safeAction } from "@/lib/safe-action";
+import { ModalBody } from "@/components/common/responsive-modal";
 import { ReminderForm } from "./reminder-form";
 import { VoiceCapture } from "./voice-capture";
 
@@ -33,21 +34,18 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
     setPreview({ draft: result.draft, heard: text, source, timezone: result.timezone });
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      {preview ? (
-        <ReminderPreview preview={preview} onCancel={() => setPreview(null)} onSaved={() => (setPreview(null), onSaved?.())} />
-      ) : (
-        <>
-          <VoiceCapture onText={handleText} busy={drafting} />
-          {error ? (
-            <p role="alert" className="text-center text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
-        </>
-      )}
-    </div>
+  // Speak or type first (scrolling body); the preview brings its own body and fixed footer.
+  return preview ? (
+    <ReminderPreview preview={preview} onCancel={() => setPreview(null)} onSaved={() => (setPreview(null), onSaved?.())} />
+  ) : (
+    <ModalBody>
+      <VoiceCapture onText={handleText} busy={drafting} />
+      {error ? (
+        <p role="alert" className="text-center text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </ModalBody>
   );
 }
 
@@ -55,9 +53,9 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
 export function ReminderPreview({ preview, onCancel, onSaved }: { preview: Preview; onCancel: () => void; onSaved: () => void }) {
   return (
     <>
-      <p className="text-[15px] text-muted-foreground">Check the details, fix anything that is off, then save.</p>
       <ReminderForm
         key={preview.heard}
+        intro="Check the details, fix anything that is off, then save."
         defaultValues={{
           title: preview.draft.title,
           remindAt: preview.draft.remindAt,

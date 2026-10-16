@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MailPlusIcon, MoreHorizontalIcon, RefreshCwIcon, UnplugIcon } from "lucide-react";
-import { ResponsiveModal } from "@/components/common/responsive-modal";
+import { ModalFooter, ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Spinner } from "@/components/ui/spinner";
@@ -65,7 +65,7 @@ export function InboxActions({ canSync, accounts }: { canSync: boolean; accounts
         title={`Disconnect ${confirming?.email ?? "Gmail"}?`}
         description="The app stops reading this Gmail and removes its suggestions. Reminders you already made stay, and other Gmails stay connected."
       >
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <ModalFooter>
           <Button variant="ghost" size="page" onClick={() => setConfirming(null)} disabled={disconnecting}>
             Keep it
           </Button>
@@ -87,7 +87,7 @@ export function InboxActions({ canSync, accounts }: { canSync: boolean; accounts
             {disconnecting ? <Spinner /> : <UnplugIcon strokeWidth={1.5} />}
             Disconnect
           </Button>
-        </div>
+        </ModalFooter>
       </ResponsiveModal>
     </>
   );

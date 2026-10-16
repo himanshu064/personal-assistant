@@ -4,6 +4,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { FormError } from "@/components/auth/form-error";
 import { FormField } from "@/components/auth/form-field";
+import { ModalBody, ModalFooter, modalFormClass } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/spinner";
@@ -35,7 +36,9 @@ export function ProjectForm({
   }
 
   return (
-    <form onSubmit={handleSubmit(submit)} noValidate className="flex flex-col gap-4">
+    // Inside a ResponsiveModal: the fields scroll, the buttons stay in the fixed footer.
+    <form onSubmit={handleSubmit(submit)} noValidate className={modalFormClass}>
+      <ModalBody>
       <FieldGroup>
         <FormField id="name" label="Name" placeholder="For example: Kitchen renovation" autoFocus error={errors.name?.message} {...register("name")} />
         <Field data-invalid={errors.description ? true : undefined}>
@@ -45,7 +48,8 @@ export function ProjectForm({
         </Field>
       </FieldGroup>
       <FormError message={errors.root?.message} />
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+      </ModalBody>
+      <ModalFooter>
         <Button type="button" variant="ghost" size="page" onClick={onCancel} disabled={isSubmitting}>
           Cancel
         </Button>
@@ -53,7 +57,7 @@ export function ProjectForm({
           {isSubmitting ? <Spinner /> : null}
           {submitLabel}
         </Button>
-      </div>
+      </ModalFooter>
     </form>
   );
 }
