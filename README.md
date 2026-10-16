@@ -1,8 +1,8 @@
 # Personal Assistant
 
-A voice first assistant: reminders with push notifications, project chats that remember what you tell them, and (soon) Gmail suggestions. Built with Next.js 16, Drizzle on Neon Postgres, Better Auth and the AI SDK. Users bring their own Claude or Gemini key.
+A voice first assistant: reminders with push notifications (alerts, repeats, daily or weekly), project chats that remember what you tell them, quick chats, and Gmail that turns meetings and dated emails into reminders. Built with Next.js 16, Drizzle on Neon Postgres, Better Auth and the AI SDK. Users bring their own Claude or Gemini key and their own Google app for Gmail.
 
-The full plan and decisions are in `.claude/plan/plan.md`.
+**Full setup guide: [docs/README.md](docs/README.md)** (run locally, database, environment variables, deploy to Vercel, cron jobs, Gmail, troubleshooting).
 
 ## Run it locally
 
