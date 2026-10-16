@@ -18,6 +18,7 @@ import { toast } from "@/components/ui/toast";
 import { safeAction } from "@/lib/safe-action";
 import { deleteReminder, setReminderStatus, snoozeReminder } from "@/app/(app)/reminders/actions";
 import type { ReminderRow } from "@/lib/data/reminders";
+import { formatReminderTime } from "@/lib/time";
 
 /** The menu on each reminder: done, snooze, edit, delete. */
 export function ReminderActions({ reminder, onEdit }: { reminder: ReminderRow; onEdit: (r: ReminderRow) => void }) {
@@ -25,10 +26,12 @@ export function ReminderActions({ reminder, onEdit }: { reminder: ReminderRow; o
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const isOpen = reminder.status === "pending";
 
-  function run(action: () => Promise<{ ok: boolean; error?: string }>, success: string) {
+  function run(action: () => Promise<{ ok: boolean; error?: string; next?: string }>, success: string) {
     startTransition(async () => {
       const result = await safeAction(action);
-      toast.add(result.ok ? { title: success, type: "success" } : { title: result.error ?? "Try again.", type: "error" });
+      // A repeating reminder is done for this time and comes back on its next date.
+      const next = result.ok && "next" in result && result.next ? `Done for now. Next: ${formatReminderTime(new Date(result.next), reminder.timezone)}` : null;
+      toast.add(result.ok ? { title: next ?? success, type: "success" } : { title: result.error ?? "Try again.", type: "error" });
     });
   }
 
@@ -59,9 +62,9 @@ export function ReminderActions({ reminder, onEdit }: { reminder: ReminderRow; o
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
                 <DropdownMenuLabel>Snooze</DropdownMenuLabel>
-                <DropdownMenuItem onClick={() => run(() => snoozeReminder(reminder.id, "10m"), "Snoozed for 10 minutes")}>
+                <DropdownMenuItem onClick={() => run(() => snoozeReminder(reminder.id, "15m"), "Snoozed for 15 minutes")}>
                   <AlarmClockIcon />
-                  10 minutes
+                  15 minutes
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => run(() => snoozeReminder(reminder.id, "1h"), "Snoozed for 1 hour")}>
                   <AlarmClockIcon />

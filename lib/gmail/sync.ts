@@ -159,6 +159,19 @@ export async function syncGmail(accountId: string): Promise<SyncResult> {
         for (const { message } of group) {
           const base = baseRow(userId, accountId, message);
           const found = byId.get(message.id);
+          // Anything the AI found with a date becomes a reminder by itself too (no date: it stays a
+          // suggestion). Keyed by date and title, so the same deadline in two emails or two Gmails
+          // gives one reminder.
+          if (found?.startsAt) {
+            invites.push({
+              gmailMessageId: message.id,
+              uid: `ai:${found.startsAt.toISOString()}:${found.title.trim().toLowerCase()}`.slice(0, 300),
+              title: found.title,
+              startsAt: found.startsAt,
+              notes: [...new Set([found.link, found.location].filter(Boolean))].join("\n").slice(0, 2000) || null,
+              action: "invite",
+            });
+          }
           rows.push(
             found
               ? { ...base, status: statusFor(found.startsAt), kind: found.kind, foundBy: "ai", title: found.title, startsAt: found.startsAt, location: found.location, link: found.link }
@@ -183,8 +196,8 @@ export async function syncGmail(accountId: string): Promise<SyncResult> {
       `);
     }
 
-    // Calendar invites become reminders by themselves (once per meeting).
-    if (invites.length) await remindMeetings(userId, invites, timezone, context.defaultLeadMinutes);
+    // Calendar invites and dated AI findings become reminders by themselves (once each).
+    if (invites.length) await remindMeetings(userId, invites, timezone, { leadMinutes: context.defaultLeadMinutes, alertCount: context.defaultAlertCount });
 
     // 6. Move the sync position: to now, or (more to read) to the newest email read, or (AI failed) nowhere.
     const newest = messages.at(-1);

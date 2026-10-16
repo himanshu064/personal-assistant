@@ -22,7 +22,6 @@ export function VoiceCapture({
   busy = false,
   prompt = "Tap and say what to remember",
   autoStart = false,
-  typingOnly = false,
   placeholder = "For example: Call Ravi tomorrow at 5pm",
 }: {
   onText: (text: string, source: "voice" | "text") => void;
@@ -30,11 +29,9 @@ export function VoiceCapture({
   prompt?: string;
   /** Start listening as soon as it shows (the tap that opened it allows the microphone). */
   autoStart?: boolean;
-  /** Only the text box, no mic. */
-  typingOnly?: boolean;
   placeholder?: string;
 }) {
-  const [typing, setTyping] = useState(typingOnly);
+  const [typing, setTyping] = useState(false);
   const [typed, setTyped] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
@@ -68,14 +65,14 @@ export function VoiceCapture({
   // first timer, so listening is never started and then stopped by the cleanup.
   const started = useRef(false);
   useEffect(() => {
-    if (!autoStart || started.current || typingOnly || !canVoice) return;
+    if (!autoStart || started.current || !canVoice) return;
     const timer = setTimeout(() => {
       started.current = true;
       if (useSpeech) speech.start();
       else recorder.start();
     }, 0);
     return () => clearTimeout(timer);
-  }, [autoStart, typingOnly, canVoice, useSpeech, speech, recorder]);
+  }, [autoStart, canVoice, useSpeech, speech, recorder]);
 
   function submitTyped(event: React.FormEvent) {
     event.preventDefault();
@@ -94,7 +91,7 @@ export function VoiceCapture({
           placeholder={placeholder}
           aria-label="What should I remind you about?"
           className="min-h-24 text-base md:text-sm"
-          autoFocus={typing && !typingOnly}
+          autoFocus={typing}
           onKeyDown={(e) => {
             // Not while an input method (Hindi, Japanese...) is still composing a word.
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submitTyped(e);
@@ -105,7 +102,7 @@ export function VoiceCapture({
             {working ? <Spinner /> : null}
             Continue
           </Button>
-          {canVoice && !typingOnly ? (
+          {canVoice ? (
             <Button type="button" variant="outline" size="page" onClick={() => setTyping(false)}>
               <MicIcon />
               Speak

@@ -4,6 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { reminders } from "@/db/schema";
 import { remindersTag } from "@/lib/data/reminders";
+import { alertSchedule } from "@/lib/reminders/schedule";
 
 export type MeetingInvite = {
   gmailMessageId: string;
@@ -15,13 +16,18 @@ export type MeetingInvite = {
 };
 
 /**
- * Calendar invites become reminders by themselves, alerting `leadMinutes`
- * before. One reminder per meeting, enforced by the unique (user, event_uid)
+ * Calendar invites, and dated items the AI found in emails, become reminders
+ * by themselves, with the user's alert settings. One reminder per meeting, enforced by the unique (user, event_uid)
  * index: an updated invite moves its reminder, the same invite arriving in a
  * second Gmail changes nothing, and a cancelled invite cancels it.
  * `invites` are oldest first, so the latest email about a meeting wins.
  */
-export async function remindMeetings(userId: string, invites: MeetingInvite[], timezone: string, leadMinutes: number) {
+export async function remindMeetings(
+  userId: string,
+  invites: MeetingInvite[],
+  timezone: string,
+  defaults: { leadMinutes: number; alertCount: number },
+) {
   const latest = [...new Map(invites.map((i) => [i.uid, i])).values()];
   const cancelled = latest.filter((i) => i.action === "cancel").map((i) => i.uid);
   const upcoming = latest.filter(
@@ -29,7 +35,7 @@ export async function remindMeetings(userId: string, invites: MeetingInvite[], t
   );
   let changed = false;
 
-  // At most three statements, however many invites arrived.
+  // At most four statements, however many invites arrived.
   if (cancelled.length) {
     const rows = await db
       .update(reminders)
@@ -42,22 +48,37 @@ export async function remindMeetings(userId: string, invites: MeetingInvite[], t
   if (upcoming.length) {
     // Same time as before: keep its state (done, already sent). A new time, or a
     // meeting cancelled earlier and invited again: pending, so it alerts again.
-    // The user's own alert time on an existing reminder is kept.
+    // The user's own alert time and count on an existing reminder are kept, and
+    // its alerts are planned again for the new time.
+    const existing = new Map(
+      (
+        await db
+          .select({ eventUid: reminders.eventUid, leadMinutes: reminders.leadMinutes, alertCount: reminders.alertCount })
+          .from(reminders)
+          .where(and(eq(reminders.userId, userId), inArray(reminders.eventUid, upcoming.map((i) => i.uid))))
+      ).map((r) => [r.eventUid, r]),
+    );
     const keep = sql`(${reminders.remindAt} = excluded.remind_at and ${reminders.status} <> 'cancelled')`;
     const saved = await db
       .insert(reminders)
       .values(
-        upcoming.map((i) => ({
-          userId,
-          title: i.title.slice(0, 200),
-          notes: i.notes,
-          remindAt: i.startsAt,
-          notifyAt: new Date(i.startsAt.getTime() - leadMinutes * 60_000),
-          leadMinutes,
-          timezone,
-          source: "gmail" as const,
-          eventUid: i.uid,
-        })),
+        upcoming.map((i) => {
+          const own = existing.get(i.uid);
+          const leadMinutes = own?.leadMinutes || defaults.leadMinutes;
+          const alertCount = own?.alertCount ?? defaults.alertCount;
+          return {
+            userId,
+            title: i.title.slice(0, 200),
+            notes: i.notes,
+            remindAt: i.startsAt,
+            ...alertSchedule(i.startsAt, leadMinutes, alertCount),
+            leadMinutes,
+            alertCount,
+            timezone,
+            source: "gmail" as const,
+            eventUid: i.uid,
+          };
+        }),
       )
       .onConflictDoUpdate({
         target: [reminders.userId, reminders.eventUid],
@@ -66,7 +87,10 @@ export async function remindMeetings(userId: string, invites: MeetingInvite[], t
           title: sql`excluded.title`,
           notes: sql`excluded.notes`,
           remindAt: sql`excluded.remind_at`,
-          notifyAt: sql`excluded.remind_at - make_interval(mins => ${reminders.leadMinutes})`,
+          leadMinutes: sql`excluded.lead_minutes`,
+          alertCount: sql`excluded.alert_count`,
+          notifyAt: sql`case when ${keep} then ${reminders.notifyAt} else excluded.notify_at end`,
+          alertsSent: sql`case when ${keep} then ${reminders.alertsSent} else excluded.alerts_sent end`,
           status: sql`case when ${keep} then ${reminders.status} else 'pending' end`,
           notifiedAt: sql`case when ${keep} then ${reminders.notifiedAt} else null end`,
           pushSent: sql`case when ${keep} then ${reminders.pushSent} else false end`,

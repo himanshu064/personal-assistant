@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { MicIcon, PenLineIcon } from "lucide-react";
+import { MicIcon, PenLineIcon, RepeatIcon } from "lucide-react";
 import { cn } from "cn";
 import { ResponsiveModal } from "@/components/common/responsive-modal";
 import { DataTable, dataTableColumns } from "@/components/data-table/data-table";
@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toast";
 import { updateReminder } from "@/app/(app)/reminders/actions";
 import type { ReminderRow } from "@/lib/data/reminders";
 import { formatRelative, formatReminderTime, isPast, toLocalInputValue } from "@/lib/time";
+import { repeatLabel } from "@/lib/reminders/repeat";
 import { safeAction } from "@/lib/safe-action";
 import { ReminderActions } from "./reminder-actions";
 import { ReminderForm } from "./reminder-form";
@@ -28,6 +29,12 @@ function When({ reminder }: { reminder: ReminderRow }) {
     <div className="flex flex-col">
       <span>{formatReminderTime(at, reminder.timezone)}</span>
       {reminder.status === "pending" ? <span className="text-xs text-muted-foreground">{formatRelative(at)}</span> : null}
+      {reminder.repeat !== "none" ? (
+        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+          <RepeatIcon className="size-3" aria-hidden />
+          {repeatLabel(reminder.repeat, toLocalInputValue(at, reminder.timezone))}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -130,6 +137,8 @@ export function RemindersTable({
               remindAt: toLocalInputValue(new Date(editing.remindAt), editing.timezone),
               notes: editing.notes ?? "",
               leadMinutes: editing.leadMinutes,
+              alertCount: editing.alertCount,
+              repeat: editing.repeat,
             }}
             timezone={editing.timezone}
             submitLabel="Save changes"

@@ -32,6 +32,7 @@ async function getSettingsForUser(userId: string) {
         provider: userSettings.provider,
         model: userSettings.model,
         defaultLeadMinutes: userSettings.defaultLeadMinutes,
+        defaultAlertCount: userSettings.defaultAlertCount,
       })
       .from(userSettings)
       .where(eq(userSettings.userId, userId))
@@ -56,6 +57,7 @@ async function getSettingsForUser(userId: string) {
     provider: choice.provider,
     model: choice.model,
     defaultLeadMinutes: settings?.defaultLeadMinutes ?? DEFAULT_LEAD_MINUTES,
+    defaultAlertCount: settings?.defaultAlertCount ?? 1,
     /** The key in use per provider. */
     keys: Object.fromEntries(keys.filter((k) => k.isActive).map((k) => [k.provider, { last4: k.last4, updatedAt: k.updatedAt }])) as Partial<
       Record<(typeof keys)[number]["provider"], { last4: string; updatedAt: Date }>

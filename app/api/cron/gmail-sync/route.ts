@@ -8,12 +8,12 @@ import { syncGmail } from "@/lib/gmail/sync";
 export const maxDuration = 60;
 
 /**
- * How often the cron-job.org job calls this route, from GMAIL_SYNC_INTERVAL_MINUTES (default 5).
- * Short, so a meeting invite becomes a reminder before its alert time.
+ * How often the cron-job.org job calls this route, from GMAIL_SYNC_INTERVAL_MINUTES
+ * (default 1440: once a day, at 6 AM IST).
  */
 function intervalMinutes(): number {
-  const n = Number(process.env.GMAIL_SYNC_INTERVAL_MINUTES ?? 5);
-  return Number.isFinite(n) && n > 0 ? n : 5;
+  const n = Number(process.env.GMAIL_SYNC_INTERVAL_MINUTES ?? 1440);
+  return Number.isFinite(n) && n > 0 ? n : 1440;
 }
 
 /** Gmails per run, synced a few at a time; the rest wait for the next run. */
@@ -25,9 +25,11 @@ const TIME_BUDGET_MS = 30_000;
 async function handle(req: NextRequest) {
   if (!isCronAuthorized(req)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  // Active connections not synced since the last run ("Sync now" counts), oldest first.
-  // One minute of slack, so a run that started a little late does not skip a Gmail.
-  const recent = Math.max(intervalMinutes() - 1, 1);
+  // Active connections not synced since the last run, oldest first. One minute of slack, so a run that
+  // started a little late does not skip a Gmail. At most an hour: with a daily run, an evening "Sync now"
+  // must not make the next morning's run skip that Gmail. A Gmail with more mail left to read keeps an
+  // older sync position, so a second run a few minutes later carries on with it.
+  const recent = Math.min(Math.max(intervalMinutes() - 1, 1), 60);
   const due = await db
     .select({ accountId: gmailSync.accountId })
     .from(gmailSync)

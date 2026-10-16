@@ -8,7 +8,8 @@ import { getMyUpcomingReminders } from "@/lib/data/reminders";
 import { draftFromOutput, draftSchema } from "@/lib/reminders/extract-ai";
 import { parseReminderWithRules } from "@/lib/reminders/parse-rules";
 import { requireUser } from "@/lib/session";
-import { formatReminderTime, toLocalInputValue } from "@/lib/time";
+import { formatReminderTime, fromLocalInputValue, toLocalInputValue } from "@/lib/time";
+import { createReminder } from "@/app/(app)/reminders/actions";
 import type { ReminderDraft } from "@/lib/validation/reminders";
 import { isValidTimezone } from "@/lib/validation/settings";
 
@@ -16,6 +17,7 @@ type Fail = { ok: false; error: string };
 
 export type AssistantResult =
   | { ok: true; kind: "reminder"; draft: ReminderDraft; timezone: string }
+  | { ok: true; kind: "saved"; id: string; title: string; remindAt: string; timezone: string }
   | { ok: true; kind: "project"; projectId: string; projectName: string; message: string }
   | { ok: true; kind: "answer"; text: string }
   | Fail;
@@ -25,6 +27,7 @@ const inputSchema = z.object({
   timezone: z.string().min(1),
   /** The project page the user is on, if any: "add this" most likely means this project. */
   projectId: z.uuid().nullable(),
+  source: z.enum(["voice", "text"]),
 });
 
 const outputSchema = z.object({
@@ -55,9 +58,29 @@ export async function askAssistant(input: unknown): Promise<AssistantResult> {
     getMyUpcomingReminders(15),
   ]);
   const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");
-  const asReminder = (draft: ReminderDraft): AssistantResult => {
-    // The user's default alert time applies when the sentence did not ask for one.
+  /**
+   * The mic button is the shortcut: a reminder with a title and a future time
+   * is saved straight away (the browser offers Undo). Without a time it cannot
+   * be saved, so the preview opens to ask for one.
+   */
+  const asReminder = async (draft: ReminderDraft): Promise<AssistantResult> => {
+    // The user's default alert time and count apply when the sentence did not ask for them.
     if (draft.leadMinutes === 0) draft.leadMinutes = context.defaultLeadMinutes;
+    if (draft.alertCount === 0) draft.alertCount = context.defaultAlertCount;
+    const at = draft.remindAt ? fromLocalInputValue(draft.remindAt, timezone) : null;
+    if (draft.title && at && at.getTime() > Date.now()) {
+      const saved = await createReminder({
+        title: draft.title,
+        remindAt: draft.remindAt,
+        notes: draft.notes,
+        leadMinutes: draft.leadMinutes,
+        alertCount: draft.alertCount,
+        repeat: draft.repeat,
+        timezone,
+        source: parsed.data.source,
+      });
+      if (saved.ok) return { ok: true, kind: "saved", id: saved.id, title: draft.title, remindAt: at.toISOString(), timezone };
+    }
     return { ok: true, kind: "reminder", draft, timezone };
   };
 

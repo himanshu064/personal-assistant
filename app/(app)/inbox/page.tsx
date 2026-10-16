@@ -118,6 +118,7 @@ async function InboxContent({ searchParams }: { searchParams: PageProps<"/inbox"
             counts={counts}
             timezone={settings.timezone ?? "UTC"}
             defaultLeadMinutes={settings.defaultLeadMinutes}
+            defaultAlertCount={settings.defaultAlertCount}
             initialItemId={typeof sp.item === "string" ? sp.item : undefined}
             showAccount={gmails.length > 1}
           />

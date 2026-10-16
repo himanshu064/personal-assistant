@@ -10,6 +10,7 @@ export const preferencesSchema = z.object({
     .number()
     .int()
     .refine((v) => (LEAD_TIME_OPTIONS as readonly number[]).includes(v), "Choose a valid option."),
+  defaultAlertCount: z.coerce.number().int().min(1, "Choose a valid option.").max(5, "Choose a valid option."),
 });
 export type PreferencesInput = z.input<typeof preferencesSchema>;
 export type PreferencesValues = z.output<typeof preferencesSchema>;

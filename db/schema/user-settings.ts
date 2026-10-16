@@ -12,7 +12,9 @@ export const userSettings = pgTable("user_settings", {
   provider: aiProviderEnum("provider"),
   model: text("model"),
   /** Alert this many minutes before, for every new reminder (typed, spoken or from a meeting invite) unless it says otherwise. */
-  defaultLeadMinutes: integer("default_lead_minutes").notNull().default(20),
+  defaultLeadMinutes: integer("default_lead_minutes").notNull().default(15),
+  /** How many alerts new reminders get, 15 minutes apart (1 to 5). */
+  defaultAlertCount: integer("default_alert_count").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

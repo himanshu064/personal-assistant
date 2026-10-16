@@ -33,7 +33,7 @@ export function parseReminderWithRules(text: string, timeZone: string, now: Date
     rest = text.slice(0, result.index) + " " + text.slice(result.index + result.text.length);
   }
 
-  return { title: cleanTitle(rest) || cleanTitle(text), remindAt, notes: "", leadMinutes: 0, via: "rules" };
+  return { title: cleanTitle(rest) || cleanTitle(text), remindAt, notes: "", leadMinutes: 0, alertCount: 0, repeat: "none", via: "rules" };
 }
 
 function cleanTitle(raw: string): string {

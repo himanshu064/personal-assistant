@@ -27,7 +27,7 @@ export function useConnectGmail() {
 const POINTS = [
   { icon: CalendarClockIcon, text: "Finds meeting invites, appointments and deadlines in your email." },
   { icon: EyeIcon, text: "Read only. The app never sends, deletes or changes your mail." },
-  { icon: ShieldCheckIcon, text: "Meeting invites become reminders by themselves. Everything else waits until you tap Create reminder." },
+  { icon: ShieldCheckIcon, text: "Anything with a date becomes a reminder by itself. Emails without a date wait here for you." },
 ];
 
 /** /api/gmail/callback sends ?error=<code> back when connecting fails. */
@@ -59,7 +59,7 @@ export function ConnectGmail({ failed, errorCode, googleReady }: { failed?: bool
       <div className="flex max-w-md flex-col gap-1.5">
         <h2 className="text-xl tracking-tight">Connect your Gmail</h2>
         <p className="text-sm text-muted-foreground">
-          Your assistant checks your email every few minutes and suggests reminders for what matters. You can connect more than one Gmail.
+          Your assistant checks your email every morning at 6 AM (or when you tap Sync now) and suggests reminders for what matters. You can connect more than one Gmail.
         </p>
       </div>
       <ul className="flex max-w-md flex-col gap-3 text-left text-sm">

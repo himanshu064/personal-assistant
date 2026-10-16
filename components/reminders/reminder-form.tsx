@@ -1,6 +1,6 @@
 "use client";
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { SparklesIcon } from "lucide-react";
 import { FormError } from "@/components/auth/form-error";
@@ -11,12 +11,15 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  ALERT_COUNT_LABELS,
+  ALERT_COUNT_OPTIONS,
   LEAD_TIME_LABELS,
   LEAD_TIME_OPTIONS,
   reminderFormSchema,
   type ReminderFormInput,
   type ReminderFormValues,
 } from "@/lib/validation/reminders";
+import { REPEAT_OPTIONS, repeatLabel } from "@/lib/reminders/repeat";
 
 export type ReminderFormResult = { ok: true } | { ok: false; error: string; field?: string };
 
@@ -46,11 +49,14 @@ export function ReminderForm({
     register,
     handleSubmit,
     setError,
+    control,
     formState: { errors, isSubmitting },
   } = useForm<ReminderFormInput, unknown, ReminderFormValues>({
     resolver: zodResolver(reminderFormSchema),
     defaultValues,
   });
+  // Repeat labels follow the chosen date ("Weekly on Friday"), like Google Calendar.
+  const remindAt = useWatch({ control, name: "remindAt" });
 
   async function submit(values: ReminderFormValues) {
     const result = await onSubmit(values);
@@ -91,12 +97,37 @@ export function ReminderForm({
         <Field>
           <FieldLabel htmlFor="leadMinutes">Alert me</FieldLabel>
           <NativeSelect id="leadMinutes" className="w-full" {...register("leadMinutes")}>
-            {LEAD_TIME_OPTIONS.map((m) => (
+            {/* "At the time" only shows for a reminder that already has it (a snoozed one); it is never offered for new ones. */}
+            {(Number(defaultValues.leadMinutes) === 0 ? [0, ...LEAD_TIME_OPTIONS] : LEAD_TIME_OPTIONS).map((m) => (
               <NativeSelectOption key={m} value={m}>
                 {LEAD_TIME_LABELS[m]}
               </NativeSelectOption>
             ))}
           </NativeSelect>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="alertCount">Remind me</FieldLabel>
+          <NativeSelect id="alertCount" className="w-full" {...register("alertCount")}>
+            {ALERT_COUNT_OPTIONS.map((n) => (
+              <NativeSelectOption key={n} value={n}>
+                {ALERT_COUNT_LABELS[n]}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <FieldDescription>Extra alerts come 15 minutes apart, before the last one.</FieldDescription>
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="repeat">Repeat</FieldLabel>
+          <NativeSelect id="repeat" className="w-full" {...register("repeat")}>
+            {REPEAT_OPTIONS.map((r) => (
+              <NativeSelectOption key={r} value={r}>
+                {repeatLabel(r, remindAt)}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          <FieldDescription>After its time passes, or when you mark it done, a repeating reminder moves to its next date.</FieldDescription>
         </Field>
 
         <Field data-invalid={errors.notes ? true : undefined}>

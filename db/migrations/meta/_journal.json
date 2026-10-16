@@ -92,6 +92,27 @@
       "when": 1792138721691,
       "tag": "0012_own_google_client",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1792142096156,
+      "tag": "0013_alert_options_15_to_60",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1792142583420,
+      "tag": "0014_repeat_alerts",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1792143106134,
+      "tag": "0015_repeating_reminders",
+      "breakpoints": true
     }
   ]
 }

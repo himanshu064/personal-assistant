@@ -17,6 +17,8 @@ const listColumns = {
   remindAt: reminders.remindAt,
   timezone: reminders.timezone,
   leadMinutes: reminders.leadMinutes,
+  alertCount: reminders.alertCount,
+  repeat: reminders.repeat,
   status: reminders.status,
   source: reminders.source,
   notifiedAt: reminders.notifiedAt,
@@ -29,6 +31,8 @@ export type ReminderRow = {
   remindAt: Date;
   timezone: string;
   leadMinutes: number;
+  alertCount: number;
+  repeat: "none" | "daily" | "weekdays" | "weekly" | "monthly" | "yearly";
   status: "pending" | "done" | "cancelled";
   source: "voice" | "text" | "gmail";
   notifiedAt: Date | null;

@@ -36,6 +36,14 @@ self.addEventListener("push", (event) => {
       badge: "/brand/icon-192.png",
       vibrate: [200, 100, 200],
       data: payload,
+      // Done stops any alerts still to come; Snooze alerts once more in 15 minutes.
+      // Shown where supported (Chrome, Edge, Android); Safari shows none and a tap opens the app.
+      actions: payload.id
+        ? [
+            { action: "done", title: "Done" },
+            { action: "snooze", title: "Snooze 15 min" },
+          ]
+        : [],
     }),
   );
 });
@@ -82,11 +90,29 @@ function urlBase64ToUint8Array(base64String) {
   return output;
 }
 
-/** Tapping the notification opens the reminder, reusing an open tab if there is one. */
+/**
+ * Done / Snooze buttons act without opening the app (if that fails, the
+ * reminder opens instead). Tapping the notification itself opens the
+ * reminder, reusing an open tab if there is one.
+ */
 self.addEventListener("notificationclick", (event) => {
   const data = event.notification.data || {};
   event.notification.close();
   const target = data.url || "/reminders";
+
+  if ((event.action === "done" || event.action === "snooze") && data.id) {
+    event.waitUntil(
+      fetch("/api/push/action", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: data.id, action: event.action }),
+      })
+        .then((res) => (res.ok ? undefined : self.clients.openWindow(target)))
+        .catch(() => self.clients.openWindow(target)),
+    );
+    return;
+  }
 
   event.waitUntil(
     (async () => {

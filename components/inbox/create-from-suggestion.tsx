@@ -18,6 +18,7 @@ export function CreateFromSuggestion({
   item,
   timezone,
   defaultLeadMinutes,
+  defaultAlertCount,
   onCreated,
 }: {
   open: boolean;
@@ -25,6 +26,7 @@ export function CreateFromSuggestion({
   item: InboxItem;
   timezone: string;
   defaultLeadMinutes: number;
+  defaultAlertCount: number;
   onCreated: () => void;
 }) {
   const notes = [
@@ -45,6 +47,8 @@ export function CreateFromSuggestion({
           notes,
           // The one "Alert me" setting, the same as for meetings added by themselves.
           leadMinutes: defaultLeadMinutes,
+          alertCount: defaultAlertCount,
+          repeat: "none",
         }}
         timezone={timezone}
         submitLabel="Save reminder"

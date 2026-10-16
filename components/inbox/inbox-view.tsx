@@ -42,7 +42,7 @@ const KINDS: { kind: Kind; label: string; dot: string }[] = [
 const KIND_LABEL: Record<Kind, string> = { meeting: "Meeting", reminder: "Reminder", deadline: "Deadline" };
 
 const EMPTY: Record<InboxStatus, { title: string; description: string }> = {
-  new: { title: "No new suggestions", description: "Meetings and deadlines found in your email appear here. The next check runs within a few minutes." },
+  new: { title: "No new suggestions", description: "Meetings and deadlines found in your email appear here. The next check runs at 6 AM. Tap Sync now to check right away." },
   added: { title: "Nothing added yet", description: "Suggestions you turn into reminders move here." },
   dismissed: { title: "Nothing dismissed", description: "Suggestions you dismiss move here, in case you change your mind." },
 };
@@ -58,6 +58,7 @@ export function InboxView({
   counts,
   timezone,
   defaultLeadMinutes,
+  defaultAlertCount,
   initialItemId,
   showAccount,
 }: {
@@ -66,6 +67,7 @@ export function InboxView({
   counts: InboxCounts;
   timezone: string;
   defaultLeadMinutes: number;
+  defaultAlertCount: number;
   initialItemId?: string;
   /** Several Gmails are connected: say which one each email came to. */
   showAccount: boolean;
@@ -212,6 +214,7 @@ export function InboxView({
             item={selected}
             timezone={timezone}
             defaultLeadMinutes={defaultLeadMinutes}
+            defaultAlertCount={defaultAlertCount}
             showAccount={showAccount}
             onBack={() => select(null)}
           />
@@ -230,12 +233,14 @@ function Details({
   item,
   timezone,
   defaultLeadMinutes,
+  defaultAlertCount,
   showAccount,
   onBack,
 }: {
   item: InboxItem;
   timezone: string;
   defaultLeadMinutes: number;
+  defaultAlertCount: number;
   showAccount: boolean;
   onBack: () => void;
 }) {
@@ -357,6 +362,7 @@ function Details({
         item={item}
         timezone={timezone}
         defaultLeadMinutes={defaultLeadMinutes}
+        defaultAlertCount={defaultAlertCount}
         onCreated={onBack}
       />
     </>

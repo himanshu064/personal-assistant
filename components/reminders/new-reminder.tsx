@@ -15,8 +15,9 @@ export function browserTimezone() {
 }
 
 /**
- * Type a reminder, check the preview, then save. Speaking goes through the
- * assistant button; this is the typed way in. Unframed, so the New dialog can place it.
+ * "New reminder": speak (first) or type, then check the preview (with Repeat)
+ * and save. The floating mic is the shortcut that saves straight away.
+ * Unframed, so the New dialog can place it.
  */
 export function NewReminder({ onSaved }: { onSaved?: () => void }) {
   const [drafting, setDrafting] = useState(false);
@@ -38,7 +39,7 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
         <ReminderPreview preview={preview} onCancel={() => setPreview(null)} onSaved={() => (setPreview(null), onSaved?.())} />
       ) : (
         <>
-          <VoiceCapture onText={handleText} busy={drafting} typingOnly />
+          <VoiceCapture onText={handleText} busy={drafting} />
           {error ? (
             <p role="alert" className="text-center text-sm text-destructive">
               {error}
@@ -62,6 +63,8 @@ export function ReminderPreview({ preview, onCancel, onSaved }: { preview: Previ
           remindAt: preview.draft.remindAt,
           notes: preview.draft.notes,
           leadMinutes: preview.draft.leadMinutes,
+          alertCount: preview.draft.alertCount,
+          repeat: preview.draft.repeat,
         }}
         timezone={preview.timezone}
         heard={preview.heard}

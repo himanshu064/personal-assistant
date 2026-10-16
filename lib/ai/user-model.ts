@@ -15,6 +15,7 @@ export type DraftContext = {
   /** Saved timezone, or null for a brand new user. */
   timezone: string | null;
   defaultLeadMinutes: number;
+  defaultAlertCount: number;
   /** The model the user picked, built with their own key; null without a key for that provider. */
   model: LanguageModel | null;
   /** The cheapest model of the same provider and key, for background work such as project memory. */
@@ -38,6 +39,7 @@ export async function getDraftContext(userId: string, feature: AiFeature): Promi
       provider: userSettings.provider,
       model: userSettings.model,
       defaultLeadMinutes: userSettings.defaultLeadMinutes,
+      defaultAlertCount: userSettings.defaultAlertCount,
       keyId: aiKeys.id,
       keyProvider: aiKeys.provider,
       encryptedKey: aiKeys.encryptedKey,
@@ -58,6 +60,7 @@ export async function getDraftContext(userId: string, feature: AiFeature): Promi
   return {
     timezone: first?.timezone ?? null,
     defaultLeadMinutes: first?.defaultLeadMinutes ?? DEFAULT_LEAD_MINUTES,
+    defaultAlertCount: first?.defaultAlertCount ?? 1,
     model: apiKey ? build(choice.model) : null,
     cheapModel: apiKey ? build(cheapId) : null,
     provider: choice.provider,

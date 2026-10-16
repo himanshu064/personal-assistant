@@ -22,7 +22,7 @@ export async function savePreferences(input: unknown): Promise<ActionResult> {
   const parsed = preferencesSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Check the highlighted fields." };
 
-  const { timezone, provider, model, defaultLeadMinutes } = parsed.data;
+  const { timezone, provider, model, defaultLeadMinutes, defaultAlertCount } = parsed.data;
   if (!isValidTimezone(timezone)) return { ok: false, error: "Unknown timezone.", field: "timezone" };
   // Only a model the user's own key lists (or the built in default). The list is cached per key.
   const options = await getMyModelOptions();
@@ -31,8 +31,8 @@ export async function savePreferences(input: unknown): Promise<ActionResult> {
   // One round trip: insert, or update when the row already exists.
   await db
     .insert(userSettings)
-    .values({ userId: user.id, timezone, provider, model, defaultLeadMinutes })
-    .onConflictDoUpdate({ target: userSettings.userId, set: { timezone, provider, model, defaultLeadMinutes } });
+    .values({ userId: user.id, timezone, provider, model, defaultLeadMinutes, defaultAlertCount })
+    .onConflictDoUpdate({ target: userSettings.userId, set: { timezone, provider, model, defaultLeadMinutes, defaultAlertCount } });
 
   updateTag(settingsTag(user.id));
   return { ok: true, message: "Preferences saved." };

@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { savePreferences } from "@/app/(app)/settings/actions";
 import type { ModelOption } from "@/lib/ai/list-models";
 import { AI_PROVIDERS, PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
-import { LEAD_TIME_LABELS, LEAD_TIME_OPTIONS } from "@/lib/validation/reminders";
+import { ALERT_COUNT_LABELS, ALERT_COUNT_OPTIONS, LEAD_TIME_LABELS, LEAD_TIME_OPTIONS } from "@/lib/validation/reminders";
 import { preferencesSchema, type PreferencesInput, type PreferencesValues } from "@/lib/validation/settings";
 import { safeAction } from "@/lib/safe-action";
 
@@ -27,7 +27,7 @@ export function PreferencesForm({
 }: {
   /** Per provider: its cheapest model, and the models the user's key can use (live from the provider). */
   catalog: Record<AiProvider, { defaultModel: string; models: ModelOption[] }>;
-  initial: { timezone: string | null; provider: AiProvider; model: string; defaultLeadMinutes: number };
+  initial: { timezone: string | null; provider: AiProvider; model: string; defaultLeadMinutes: number; defaultAlertCount: number };
   savedProviders: AiProvider[];
 }) {
   const detected = useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
@@ -57,6 +57,7 @@ export function PreferencesForm({
       provider: initial.provider,
       model: initial.model,
       defaultLeadMinutes: initial.defaultLeadMinutes,
+      defaultAlertCount: initial.defaultAlertCount,
     },
   });
 
@@ -110,7 +111,23 @@ export function PreferencesForm({
                 ))}
               </NativeSelect>
               <FieldDescription>
-                For every new reminder, unless you say otherwise. Meeting invites in your Gmail become reminders by themselves, with this alert.
+                For every new reminder, unless you say otherwise, including the ones made from your Gmail. Alerts go out on the quarter hour
+                (:00, :15, :30, :45), at the one closest to this time.
+              </FieldDescription>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="defaultAlertCount">Remind me</FieldLabel>
+              <NativeSelect id="defaultAlertCount" className={selectClass} {...register("defaultAlertCount")}>
+                {ALERT_COUNT_OPTIONS.map((n) => (
+                  <NativeSelectOption key={n} value={n}>
+                    {ALERT_COUNT_LABELS[n]}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+              <FieldDescription>
+                More than once: extra alerts come 15 minutes apart, ending at the Alert me time. For example, a call at 4:40 with 15 minutes
+                and 3 times alerts at 4:00, 4:15 and 4:30. Marking it done stops the rest.
               </FieldDescription>
             </Field>
 

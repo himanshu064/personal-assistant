@@ -69,6 +69,8 @@ export type PushPayload = {
   tag: string;
   /** Page to open when the notification is tapped. */
   url: string;
+  /** The reminder, for the notification's Done and Snooze buttons. */
+  id?: string;
 };
 
 export type PushDevice = { id: string; userId: string; endpoint: string; p256dh: string; auth: string };

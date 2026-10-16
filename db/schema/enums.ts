@@ -7,6 +7,8 @@ export const reminderStatusEnum = pgEnum("reminder_status", ["pending", "done", 
 /** Where a reminder came from: spoken, typed, or (Phase 3) a Gmail suggestion. */
 export const reminderSourceEnum = pgEnum("reminder_source", ["voice", "text", "gmail"]);
 
+/** How a reminder repeats (the same presets as Google Calendar, without Custom). */
+export const reminderRepeatEnum = pgEnum("reminder_repeat", ["none", "daily", "weekdays", "weekly", "monthly", "yearly"]);
 export const chatRoleEnum = pgEnum("chat_role", ["user", "assistant"]);
 
 export const gmailSyncStatusEnum = pgEnum("gmail_sync_status", ["active", "needs_reconnect"]);

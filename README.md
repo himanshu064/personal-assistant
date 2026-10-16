@@ -46,9 +46,9 @@ Create these jobs on cron-job.org (or Vercel Cron):
 | Job | Request | Every |
 |---|---|---|
 | Send due reminders | `POST https://<your domain>/api/cron/reminders` with header `x-cron-secret: <CRON_SECRET>` | 15 minutes, at :00, :15, :30, :45 (`REMINDER_CRON_INTERVAL_MINUTES=15`) |
-| Read new Gmail | `POST https://<your domain>/api/cron/gmail-sync` with the same header | 15 minutes, at the same times (`GMAIL_SYNC_INTERVAL_MINUTES=15`) |
+| Read new Gmail | `POST https://<your domain>/api/cron/gmail-sync` with the same header | Once a day at 6:00 AM IST (`GMAIL_SYNC_INTERVAL_MINUTES=1440`). Optional extra runs at 6:10 and 6:20 finish very full inboxes. |
 
-Both jobs run at the same minutes on purpose: Neon puts the database to sleep after 5 quiet minutes, and one shared wake up every 15 minutes keeps it inside the free plan's 100 compute hours (about 60 a month). Reminders can arrive up to 15 minutes early, never late.
+Neon puts the database to sleep after 5 quiet minutes; a wake up every 15 minutes keeps it inside the free plan's 100 compute hours (about 60 a month). Alert options (15, 30, 45 minutes, 1 hour before) are multiples of 15, so they arrive exactly for times on the quarter hour; other times arrive up to 15 minutes early, never late. Users can tap "Sync now" in the Inbox to read Gmail between the daily runs. "Remind me" (1 to 5 times) adds alerts 15 minutes apart before the last one; marking a reminder done, or the notification's Done button, stops the rest.
 
 ## Gmail
 

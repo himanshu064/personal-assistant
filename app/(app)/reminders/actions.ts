@@ -10,6 +10,9 @@ import { aiKeys, emailItems, reminders } from "@/db/schema";
 import { MODEL_CATALOG } from "@/lib/ai/models";
 import { getDraftContext } from "@/lib/ai/user-model";
 import { withUsage } from "@/lib/ai/usage";
+import { alertSchedule } from "@/lib/reminders/schedule";
+import { completeReminder } from "@/lib/reminders/complete";
+import { SNOOZE_PRESETS, snoozeReminderFor } from "@/lib/reminders/snooze";
 import { decrypt } from "@/lib/crypto";
 import { inboxTag } from "@/lib/data/inbox-tags";
 import { remindersTag } from "@/lib/data/reminders";
@@ -51,6 +54,7 @@ export async function draftReminder(input: unknown): Promise<{ ok: true; draft: 
   draft ??= parseReminderWithRules(parsed.data.text, timezone);
   // The user's default alert time applies when the sentence did not ask for one.
   if (draft.leadMinutes === 0) draft.leadMinutes = context.defaultLeadMinutes;
+  if (draft.alertCount === 0) draft.alertCount = context.defaultAlertCount;
   return { ok: true, draft, timezone };
 }
 
@@ -59,10 +63,11 @@ const timedSchema = reminderFormSchema.extend({
   timezone: z.string().refine(isValidTimezone, "Unknown timezone."),
 });
 
-function toInstants(values: z.output<typeof timedSchema>): { remindAt: Date; notifyAt: Date } | Fail {
+/** The reminder's time, and when its alerts go out (see lib/reminders/schedule.ts). */
+function toInstants(values: z.output<typeof timedSchema>): { remindAt: Date; notifyAt: Date; alertsSent: number } | Fail {
   const remindAt = fromLocalInputValue(values.remindAt, values.timezone);
   if (!remindAt) return { ok: false, error: "Choose a date and time.", field: "remindAt" };
-  return { remindAt, notifyAt: new Date(remindAt.getTime() - values.leadMinutes * 60_000) };
+  return { remindAt, ...alertSchedule(remindAt, values.leadMinutes, values.alertCount) };
 }
 
 /**
@@ -70,7 +75,7 @@ function toInstants(values: z.output<typeof timedSchema>): { remindAt: Date; not
  * read first (for its invite UID) and then marked as added and linked to the
  * reminder. If that meeting already has a reminder, it is linked instead.
  */
-export async function createReminder(input: unknown): Promise<{ ok: true } | Fail> {
+export async function createReminder(input: unknown): Promise<{ ok: true; id: string } | Fail> {
   const user = await requireUser();
   const parsed = timedSchema
     .extend({ source: z.enum(["voice", "text", "gmail"]), emailItemId: z.uuid().optional() })
@@ -101,6 +106,9 @@ export async function createReminder(input: unknown): Promise<{ ok: true } | Fai
       title: parsed.data.title,
       notes: parsed.data.notes || null,
       leadMinutes: parsed.data.leadMinutes,
+      alertCount: parsed.data.alertCount,
+      repeat: parsed.data.repeat,
+      repeatAnchor: parsed.data.repeat === "none" ? null : times.remindAt,
       timezone: parsed.data.timezone,
       source: parsed.data.source,
       eventUid,
@@ -127,7 +135,7 @@ export async function createReminder(input: unknown): Promise<{ ok: true } | Fai
       .where(and(eq(emailItems.id, parsed.data.emailItemId), eq(emailItems.userId, user.id), inArray(emailItems.status, ["new", "dismissed"])));
     updateTag(inboxTag(user.id));
   }
-  return { ok: true };
+  return { ok: true, id: created.id };
 }
 
 const idSchema = z.uuid();
@@ -154,16 +162,24 @@ export async function updateReminder(id: unknown, input: unknown): Promise<{ ok:
 
   const timeChanged = inPast
     ? sql`false`
-    : sql`(date_trunc('minute', ${reminders.remindAt}) <> ${remindAtIso}::timestamptz or ${reminders.leadMinutes} <> ${parsed.data.leadMinutes})`;
+    : sql`(date_trunc('minute', ${reminders.remindAt}) <> ${remindAtIso}::timestamptz or ${reminders.leadMinutes} <> ${parsed.data.leadMinutes} or ${reminders.alertCount} <> ${parsed.data.alertCount} or ${reminders.repeat} <> ${parsed.data.repeat})`;
   const updated = await db
     .update(reminders)
     .set({
       title: parsed.data.title,
       notes: parsed.data.notes || null,
       leadMinutes: parsed.data.leadMinutes,
+      alertCount: parsed.data.alertCount,
+      repeat: parsed.data.repeat,
+      // A new time or repeat starts the series again from this date.
+      repeatAnchor:
+        parsed.data.repeat === "none"
+          ? null
+          : sql`case when ${timeChanged} or ${reminders.repeatAnchor} is null then ${remindAtIso}::timestamptz else ${reminders.repeatAnchor} end`,
       timezone: parsed.data.timezone,
       remindAt: times.remindAt,
-      notifyAt: times.notifyAt,
+      notifyAt: sql`case when ${timeChanged} then ${times.notifyAt.toISOString()}::timestamptz else ${reminders.notifyAt} end`,
+      alertsSent: sql`case when ${timeChanged} then ${times.alertsSent} else ${reminders.alertsSent} end`,
       status: sql`case when ${timeChanged} then 'pending'::reminder_status else ${reminders.status} end`,
       notifiedAt: sql`case when ${timeChanged} then null else ${reminders.notifiedAt} end`,
       pushSent: sql`case when ${timeChanged} then false else ${reminders.pushSent} end`,
@@ -190,11 +206,19 @@ export async function updateReminder(id: unknown, input: unknown): Promise<{ ok:
  * Done, cancelled, or back to pending. Reopening a reminder whose time has
  * passed keeps it marked as handled, so it does not fire a late push.
  */
-export async function setReminderStatus(id: unknown, status: unknown): Promise<{ ok: true } | Fail> {
+export async function setReminderStatus(id: unknown, status: unknown): Promise<{ ok: true; next?: string } | Fail> {
   const user = await requireUser();
   const reminderId = idSchema.safeParse(id);
   const next = z.enum(["pending", "done", "cancelled"]).safeParse(status);
   if (!reminderId.success || !next.success) return { ok: false, error: "Something went wrong. Try again." };
+
+  // Done on a repeating reminder moves it to its next date instead.
+  if (next.data === "done") {
+    const result = await completeReminder(user.id, reminderId.data);
+    if (!result.found) return { ok: false, error: "This reminder no longer exists." };
+    updateTag(remindersTag(user.id));
+    return { ok: true, next: result.next?.toISOString() };
+  }
 
   await db
     .update(reminders)
@@ -209,30 +233,14 @@ export async function setReminderStatus(id: unknown, status: unknown): Promise<{
   return { ok: true };
 }
 
-/**
- * Moves the reminder later and re-arms it, in one UPDATE. "tomorrow" is 9:00
- * tomorrow in the reminder's own timezone, worked out by Postgres. Times are
- * rounded to the minute so later edits compare cleanly.
- */
+/** Snooze menu: moves the reminder later and re-arms it (see lib/reminders/snooze.ts). */
 export async function snoozeReminder(id: unknown, preset: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
   const reminderId = idSchema.safeParse(id);
-  const choice = z.enum(["10m", "1h", "tomorrow"]).safeParse(preset);
+  const choice = z.enum(SNOOZE_PRESETS).safeParse(preset);
   if (!reminderId.success || !choice.success) return { ok: false, error: "Something went wrong. Try again." };
 
-  const newTime =
-    choice.data === "tomorrow"
-      ? sql`((date_trunc('day', now() at time zone ${reminders.timezone}) + interval '1 day 9 hours') at time zone ${reminders.timezone})`
-      : sql`date_trunc('minute', now() + ${choice.data === "10m" ? "10 minutes" : "1 hour"}::interval)`;
-
-  // A snoozed reminder alerts at the new time itself, so the lead time is cleared.
-  const updated = await db
-    .update(reminders)
-    .set({ remindAt: newTime, notifyAt: newTime, leadMinutes: 0, status: "pending", notifiedAt: null, pushSent: false })
-    .where(and(eq(reminders.id, reminderId.data), eq(reminders.userId, user.id)))
-    .returning({ id: reminders.id });
-  if (updated.length === 0) return { ok: false, error: "This reminder no longer exists." };
-
+  if (!(await snoozeReminderFor(user.id, reminderId.data, choice.data))) return { ok: false, error: "This reminder no longer exists." };
   updateTag(remindersTag(user.id));
   return { ok: true };
 }

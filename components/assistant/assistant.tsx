@@ -7,6 +7,9 @@ import { Button } from "@/components/ui/button";
 import { browserTimezone, ReminderPreview, type Preview } from "@/components/reminders/new-reminder";
 import { VoiceCapture } from "@/components/reminders/voice-capture";
 import { askAssistant } from "@/app/(app)/assistant/actions";
+import { deleteReminder } from "@/app/(app)/reminders/actions";
+import { toast } from "@/components/ui/toast";
+import { formatReminderTime } from "@/lib/time";
 import { handOff } from "@/lib/assistant/handoff";
 import { safeAction } from "@/lib/safe-action";
 
@@ -28,12 +31,31 @@ export function Assistant({ onDone }: { onDone: () => void }) {
     setWorking(true);
     setError(null);
     const projectId = pathname.match(/^\/projects\/([0-9a-f-]{36})/)?.[1] ?? null;
-    const result = await safeAction(() => askAssistant({ text, timezone: browserTimezone(), projectId }));
+    const result = await safeAction(() => askAssistant({ text, timezone: browserTimezone(), projectId, source }));
     setWorking(false);
     if (!result.ok) return setError(result.error);
 
     if (result.kind === "reminder") return setStep({ kind: "reminder", preview: { draft: result.draft, heard: text, source, timezone: result.timezone } });
     if (result.kind === "answer") return setStep({ kind: "answer", heard: text, text: result.text });
+    if (result.kind === "saved") {
+      // Saved straight away (the mic is the shortcut); Undo removes it again.
+      onDone();
+      const savedId = result.id;
+      toast.add({
+        title: `Reminder saved: ${result.title}`,
+        description: formatReminderTime(new Date(result.remindAt), result.timezone),
+        type: "success",
+        timeout: 8000,
+        actionProps: {
+          children: "Undo",
+          onClick: () =>
+            void safeAction(() => deleteReminder(savedId)).then((r) =>
+              toast.add(r.ok ? { title: "Reminder removed", type: "success" } : { title: r.error, type: "error" }),
+            ),
+        },
+      });
+      return;
+    }
     handOff(result.projectId, result.message);
     router.push(`/projects/${result.projectId}`);
     onDone();

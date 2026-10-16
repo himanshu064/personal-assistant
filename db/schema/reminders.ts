@@ -1,7 +1,7 @@
 import { relations, sql } from "drizzle-orm";
 import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
-import { reminderSourceEnum, reminderStatusEnum } from "./enums";
+import { reminderRepeatEnum, reminderSourceEnum, reminderStatusEnum } from "./enums";
 
 export const reminders = pgTable(
   "reminders",
@@ -16,11 +16,20 @@ export const reminders = pgTable(
     remindAt: timestamp("remind_at", { withTimezone: true }).notNull(),
     /** The user's timezone when it was created, for showing times in pushes. */
     timezone: text("timezone").notNull(),
-    /** Alert this many minutes before remindAt. */
+    /** Alert this many minutes before remindAt (0 only after a snooze: alert at the new time). */
     leadMinutes: integer("lead_minutes").notNull().default(0),
+    /** How many alerts, 15 minutes apart, ending at the "Alert me" time (1 to 5). */
+    alertCount: integer("alert_count").notNull().default(1),
+    /** Alerts already sent (or skipped because their time had passed when the reminder was saved). */
+    alertsSent: integer("alerts_sent").notNull().default(0),
+    /** Repeats: after its time passes (or it is marked done) it moves to the next date. See lib/reminders/repeat.ts. */
+    repeat: reminderRepeatEnum("repeat").notNull().default("none"),
+    /** The first date of a repeating reminder, so monthly on the 31st returns to the 31st after a short month. */
+    repeatAnchor: timestamp("repeat_anchor", { withTimezone: true }),
     /**
-     * remindAt minus leadMinutes, set on every write. Stored (not computed in
-     * the query) so the cron can use an index to find due reminders.
+     * When the NEXT alert goes out (see lib/reminders/schedule.ts), set on every
+     * write and moved 15 minutes on after each alert while more are left.
+     * Stored so the cron can use an index to find due reminders.
      */
     notifyAt: timestamp("notify_at", { withTimezone: true }).notNull(),
     status: reminderStatusEnum("status").notNull().default("pending"),

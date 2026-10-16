@@ -13,7 +13,7 @@ export const metadata: Metadata = { title: "Settings" };
 export default function GeneralSettingsPage() {
   return (
     <SettingsSection title="Preferences" description="Your timezone sets reminder times. The provider and model power every AI feature.">
-      <Suspense fallback={<FormCardSkeleton fields={4} />}>
+      <Suspense fallback={<FormCardSkeleton fields={5} />}>
         <General />
       </Suspense>
     </SettingsSection>
@@ -28,7 +28,7 @@ async function General() {
         anthropic: { defaultModel: MODEL_CATALOG.providers.anthropic.defaultModel, models: options.anthropic },
         google: { defaultModel: MODEL_CATALOG.providers.google.defaultModel, models: options.google },
       }}
-      initial={{ timezone: settings.timezone, provider: settings.provider, model: settings.model, defaultLeadMinutes: settings.defaultLeadMinutes }}
+      initial={{ timezone: settings.timezone, provider: settings.provider, model: settings.model, defaultLeadMinutes: settings.defaultLeadMinutes, defaultAlertCount: settings.defaultAlertCount }}
       savedProviders={AI_PROVIDERS.filter((p) => settings.keys[p])}
     />
   );
