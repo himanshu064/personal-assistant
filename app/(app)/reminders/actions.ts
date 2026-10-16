@@ -11,6 +11,7 @@ import { MODEL_CATALOG } from "@/lib/ai/models";
 import { getDraftContext } from "@/lib/ai/user-model";
 import { withUsage } from "@/lib/ai/usage";
 import { alertSchedule } from "@/lib/reminders/schedule";
+import { normaliseSpokenTimes } from "@/lib/reminders/spoken-text";
 import { completeReminder } from "@/lib/reminders/complete";
 import { SNOOZE_PRESETS, snoozeReminderFor } from "@/lib/reminders/snooze";
 import { decrypt } from "@/lib/crypto";
@@ -40,18 +41,20 @@ export async function draftReminder(input: unknown): Promise<{ ok: true; draft: 
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Try again." };
 
   const context = await getDraftContext(user.id, "reminder");
+  // Spoken times ("5 30 PM") written as normal times ("5:30 PM") before anything reads them.
+  const text = normaliseSpokenTimes(parsed.data.text);
   // The saved timezone wins; the browser's is the fallback for brand new users.
   const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");
 
   let draft: ReminderDraft | null = null;
   if (context.model) {
     try {
-      draft = await extractReminderWithAi(context.model, parsed.data.text, timezone);
+      draft = await extractReminderWithAi(context.model, text, timezone);
     } catch (error) {
       console.warn("reminders.draft.ai_failed", { message: error instanceof Error ? error.message : String(error) });
     }
   }
-  draft ??= parseReminderWithRules(parsed.data.text, timezone);
+  draft ??= parseReminderWithRules(text, timezone);
   // The user's default alert time applies when the sentence did not ask for one.
   if (draft.leadMinutes === 0) draft.leadMinutes = context.defaultLeadMinutes;
   if (draft.alertCount === 0) draft.alertCount = context.defaultAlertCount;

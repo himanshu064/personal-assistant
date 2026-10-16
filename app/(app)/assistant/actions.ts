@@ -7,6 +7,7 @@ import { chatMessageOf, detectIntent } from "@/lib/assistant/detect-intent";
 import { getMyProjects } from "@/lib/data/projects";
 import { draftFromOutput, draftSchema, extractReminderWithAi } from "@/lib/reminders/extract-ai";
 import { parseReminderWithRules } from "@/lib/reminders/parse-rules";
+import { normaliseSpokenTimes } from "@/lib/reminders/spoken-text";
 import { requireUser } from "@/lib/session";
 import { fromLocalInputValue, toLocalInputValue } from "@/lib/time";
 import { createReminder } from "@/app/(app)/reminders/actions";
@@ -56,7 +57,9 @@ export async function askAssistant(input: unknown): Promise<AssistantResult> {
   const user = await requireUser();
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Try again." };
-  const { text, projectId: currentProjectId } = parsed.data;
+  const { projectId: currentProjectId } = parsed.data;
+  // Spoken times ("5 30 PM") written as normal times ("5:30 PM") before anything reads them.
+  const text = normaliseSpokenTimes(parsed.data.text);
 
   const [context, projects] = await Promise.all([getDraftContext(user.id, "assistant"), getMyProjects()]);
   const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");

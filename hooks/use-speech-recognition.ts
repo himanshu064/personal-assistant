@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 // The Web Speech API is not in TypeScript's DOM types; this is the part we use.
-type SpeechRecognitionAlternative = { transcript: string };
+type SpeechRecognitionAlternative = { transcript: string; confidence?: number };
 type SpeechRecognitionResult = { isFinal: boolean; 0: SpeechRecognitionAlternative; length: number };
 type SpeechRecognitionEvent = { resultIndex: number; results: ArrayLike<SpeechRecognitionResult> };
 type SpeechRecognitionErrorEvent = { error: string };
@@ -28,6 +28,46 @@ function getCtor(): SpeechRecognitionCtor | null {
 
 const noopSubscribe = () => () => {};
 
+/** Listening ends this long after the last word heard (the user has finished speaking). */
+const SILENCE_MS = 2000;
+/** iPhone: the gap before listening again after a phrase ends (from the iOS guide below). */
+const IOS_RESTART_MS = 200;
+
+/**
+ * The browser's speech service behaves differently per platform (researched 16 Oct 2026):
+ * - desktop (Chrome, Edge, Mac Safari): continuous mode works, so it keeps listening through pauses.
+ * - android: continuous mode restarts the mic with a beep; react-speech-recognition turns it off on
+ *   Android and ignores the duplicate "final" results Android sends with confidence 0 (its source,
+ *   lines 166 and 324). We do the same: one phrase per tap.
+ * - ios: continuous mode can hang (the final text never arrives). Stable pattern: one phrase at a
+ *   time, restart about 200 ms later, and join the pieces (lilting.ch, "How to Stabilize the
+ *   WebSpeech API on iOS", Jan 2026).
+ */
+type Platform = "desktop" | "android" | "ios";
+
+function platform(): Platform {
+  const ua = navigator.userAgent;
+  if (/android/i.test(ua)) return "android";
+  // iPadOS reports itself as a Mac; touch points tell them apart.
+  if (/iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return "ios";
+  return "desktop";
+}
+
+/**
+ * The language the speech service listens for: English (India) on a device set to India time,
+ * otherwise the browser's language. (Whether en-IN hears Indian names better is not published;
+ * it matches how the user speaks.)
+ */
+function speechLanguage() {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (zone === "Asia/Kolkata" || zone === "Asia/Calcutta") return "en-IN";
+  return navigator.language || "en-US";
+}
+
+function tidy(text: string) {
+  return text.replace(/\s+/g, " ").trim();
+}
+
 /** Messages for the errors a user can act on. */
 const ERROR_MESSAGES: Record<string, string> = {
   "not-allowed": "Microphone access is blocked. Allow it in your browser settings, or type instead.",
@@ -38,7 +78,9 @@ const ERROR_MESSAGES: Record<string, string> = {
 
 /**
  * The browser's free speech to text (Chrome, Edge, Safari including iPhone).
- * Shows words live while the user speaks and stops on its own after a pause.
+ * Shows words live, as one line, while the user speaks, and calls onFinal once
+ * with the whole sentence: about 2 seconds after the last word, or when stopped.
+ * How pauses are handled depends on the platform (see Platform above).
  * `supported` is false in browsers without it (mainly Firefox).
  */
 export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => void }) {
@@ -47,62 +89,141 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
-  const finalRef = useRef("");
   const onFinalRef = useRef(onFinal);
+  /** Text from earlier phrases of this turn (iPhone joins several). */
+  const committedRef = useRef("");
+  /** The current phrase: finished words, and words still being heard. */
+  const sessionRef = useRef({ final: "", interim: "" });
+  /** True while the user wants to keep talking (cleared by stop, silence or finishing). */
+  const wantedRef = useRef(false);
+  const silenceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restartRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** False once the component is gone: nothing is handed over after that. */
+  const aliveRef = useRef(true);
 
   useEffect(() => {
     onFinalRef.current = onFinal;
   }, [onFinal]);
 
-  const start = useCallback(() => {
-    const Ctor = getCtor();
-    if (!Ctor || recognitionRef.current) return;
+  const clearTimers = () => {
+    if (silenceRef.current) clearTimeout(silenceRef.current);
+    if (restartRef.current) clearTimeout(restartRef.current);
+    silenceRef.current = restartRef.current = null;
+  };
 
-    const recognition = new Ctor();
-    recognition.lang = navigator.language || "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    finalRef.current = "";
-    setTranscript("");
-    setError(null);
-
-    recognition.onresult = (event) => {
-      let interim = "";
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const result = event.results[i];
-        if (result.isFinal) finalRef.current += result[0].transcript;
-        else interim += result[0].transcript;
-      }
-      setTranscript((finalRef.current + interim).trim());
-    };
-    recognition.onerror = (event) => {
-      // "no-speech" and "aborted" are normal endings, not problems to report.
-      if (event.error !== "no-speech" && event.error !== "aborted") {
-        setError(ERROR_MESSAGES[event.error] ?? "Voice input stopped. Try again or type instead.");
-      }
-    };
-    recognition.onend = () => {
-      recognitionRef.current = null;
-      setListening(false);
-      const text = finalRef.current.trim();
-      if (text) onFinalRef.current(text);
-    };
-
-    recognitionRef.current = recognition;
-    setListening(true);
-    try {
-      recognition.start();
-    } catch {
-      recognitionRef.current = null;
-      setListening(false);
-      setError("Voice input could not start. Try again or type instead.");
-    }
+  /** Ends the turn and hands over the whole sentence, once. */
+  const finish = useCallback(() => {
+    wantedRef.current = false;
+    clearTimers();
+    setListening(false);
+    const text = committedRef.current;
+    committedRef.current = "";
+    if (text && aliveRef.current) onFinalRef.current(text);
   }, []);
 
-  const stop = useCallback(() => recognitionRef.current?.stop(), []);
+  const start = useCallback(() => {
+    const Ctor = getCtor();
+    if (!Ctor || recognitionRef.current || wantedRef.current) return;
+    const where = platform();
+    wantedRef.current = true;
+    committedRef.current = "";
+    setTranscript("");
+    setError(null);
+    setListening(true);
 
-  // Stop listening if the component goes away mid sentence.
-  useEffect(() => () => recognitionRef.current?.abort(), []);
+    /** Silence for SILENCE_MS after the last word ends the turn. */
+    const armSilence = () => {
+      if (silenceRef.current) clearTimeout(silenceRef.current);
+      silenceRef.current = setTimeout(() => {
+        wantedRef.current = false;
+        if (recognitionRef.current) recognitionRef.current.stop();
+        else finish();
+      }, SILENCE_MS);
+    };
+
+    const listen = () => {
+      const recognition = new Ctor();
+      recognition.lang = speechLanguage();
+      recognition.continuous = where === "desktop";
+      recognition.interimResults = true;
+      sessionRef.current = { final: "", interim: "" };
+
+      recognition.onresult = (event) => {
+        // Rebuilt from all of this phrase's results each time, so nothing is repeated.
+        const finals: string[] = [];
+        const interims: string[] = [];
+        for (let i = 0; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (result.isFinal) {
+            // Android can send finished words twice, the copy with confidence 0: skip the copy
+            // only (a lone confidence 0 result is kept, so no sentence is lost).
+            const words = tidy(result[0].transcript);
+            if (where === "android" && result[0].confidence === 0 && finals.includes(words)) continue;
+            finals.push(words);
+          } else {
+            interims.push(result[0].transcript);
+          }
+        }
+        sessionRef.current = { final: tidy(finals.join(" ")), interim: tidy(interims.join(" ")) };
+        setTranscript(tidy(`${committedRef.current} ${sessionRef.current.final} ${sessionRef.current.interim}`));
+        armSilence();
+      };
+      recognition.onerror = (event) => {
+        // "no-speech" and "aborted" are normal endings, not problems to report.
+        if (event.error !== "no-speech" && event.error !== "aborted") {
+          wantedRef.current = false;
+          // iPhone, listening again after a pause was refused: what was heard is still used, quietly.
+          if (committedRef.current) return;
+          setError(ERROR_MESSAGES[event.error] ?? "Voice input stopped. Try again or type instead.");
+        }
+      };
+      recognition.onend = () => {
+        recognitionRef.current = null;
+        // Words still marked "interim" when the phrase ended count too.
+        const heard = tidy(`${sessionRef.current.final} ${sessionRef.current.interim}`);
+        committedRef.current = tidy(`${committedRef.current} ${heard}`);
+        // iPhone: the phrase ended at a pause; listen again and join the next piece.
+        // A phrase that heard nothing means the user has finished.
+        if (where === "ios" && wantedRef.current && heard) {
+          restartRef.current = setTimeout(() => {
+            if (wantedRef.current) listen();
+            else finish();
+          }, IOS_RESTART_MS);
+          return;
+        }
+        finish();
+      };
+
+      recognitionRef.current = recognition;
+      try {
+        recognition.start();
+      } catch {
+        recognitionRef.current = null;
+        if (!committedRef.current) setError("Voice input could not start. Try again or type instead.");
+        finish();
+      }
+    };
+
+    listen();
+  }, [finish]);
+
+  /** "Stop": ends the turn now; whatever was heard is handed over. */
+  const stop = useCallback(() => {
+    wantedRef.current = false;
+    if (recognitionRef.current) recognitionRef.current.stop();
+    else finish(); // between two iPhone phrases
+  }, [finish]);
+
+  // Stop listening if the component goes away mid sentence (abort hands nothing over).
+  useEffect(() => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+      wantedRef.current = false;
+      clearTimers();
+      recognitionRef.current?.abort();
+    };
+  }, []);
 
   return { supported, listening, transcript, error, start, stop };
 }
