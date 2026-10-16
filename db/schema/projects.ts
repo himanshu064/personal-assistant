@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { chatRoleEnum } from "./enums";
@@ -35,9 +35,8 @@ export const chatThreads = pgTable(
   "chat_threads",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    projectId: uuid("project_id")
-      .notNull()
-      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The project the chat belongs to; null for a quick chat (the Chat section). Chats can move between them. */
+    projectId: uuid("project_id").references(() => projects.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
@@ -51,6 +50,8 @@ export const chatThreads = pgTable(
   (t) => [
     index("chat_threads_project_updated_idx").on(t.projectId, t.updatedAt.desc()),
     index("chat_threads_user_idx").on(t.userId),
+    // The Chat section: a user's quick chats, most recent first.
+    index("chat_threads_quick_idx").on(t.userId, t.updatedAt.desc()).where(sql`${t.projectId} is null`),
   ],
 );
 

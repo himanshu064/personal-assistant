@@ -5,16 +5,31 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { ArrowUpIcon, KeyRoundIcon, MessageSquarePlusIcon, MessagesSquareIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  FolderInputIcon,
+  KeyRoundIcon,
+  MessageSquarePlusIcon,
+  MessagesSquareIcon,
+  MicIcon,
+  MoreHorizontalIcon,
+  RotateCwIcon,
+  SquareIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { cn } from "cn";
 import { ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { deleteThread } from "@/app/(app)/projects/actions";
-import { HANDOFF_EVENT, takeHandOff } from "@/lib/assistant/handoff";
+import { deleteThread, moveThread } from "@/app/(app)/projects/actions";
+import { transcribeAudio } from "@/app/(app)/reminders/actions";
+import { useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { HANDOFF_EVENT, QUICK_CHAT_HANDOFF, takeHandOff } from "@/lib/assistant/handoff";
 import type { ThreadRow } from "@/lib/data/projects";
 import { MAX_MESSAGE_CHARS, type ProjectChatMessage } from "@/lib/projects/chat-types";
 import { safeAction } from "@/lib/safe-action";
@@ -37,6 +52,10 @@ function newChatId(): string {
 
 const SUGGESTIONS = ["Summarise this project", "What is still open or pending?", "Who owes whom, and how much?"];
 
+/**
+ * A chat screen: a project's chats, or the Chat section's quick chats
+ * (projectId null). Chats can be moved between them, or deleted.
+ */
 export function ProjectChat({
   projectId,
   threads: initialThreads,
@@ -44,17 +63,22 @@ export function ProjectChat({
   initialMessages,
   hasKey,
   hasMemory,
+  moveTargets,
 }: {
-  projectId: string;
+  /** null for the Chat section (quick chats). */
+  projectId: string | null;
   threads: ThreadRow[];
   threadId: string | null;
   initialMessages: ProjectChatMessage[];
   hasKey: boolean;
   /** The project already remembers something, so questions make sense in a new chat. */
   hasMemory: boolean;
+  /** The user's projects, for "Move to". */
+  moveTargets: { id: string; name: string }[];
 }) {
   const router = useRouter();
-  const base = `/projects/${projectId}`;
+  const base = projectId ? `/projects/${projectId}` : "/chat";
+  const handOffKey = projectId ?? QUICK_CHAT_HANDOFF;
   // The chat being shown. Saved chats come from the URL; a new one gets a fresh id.
   const [firstId] = useState(() => threadId ?? newChatId());
   const threadRef = useRef<string>(firstId);
@@ -64,12 +88,16 @@ export function ProjectChat({
   const [deleting, startDelete] = useTransition();
   /** The chat waiting for "Delete this chat?" to be confirmed. */
   const [confirmDelete, setConfirmDelete] = useState<ThreadRow | null>(null);
+  /** The chat being moved, and where to. "" is the Chat section. */
+  const [moving, setMoving] = useState<ThreadRow | null>(null);
+  const [moveTo, setMoveTo] = useState("");
+  const [movePending, startMove] = useTransition();
   const listRef = useRef<HTMLDivElement>(null);
 
   const transport = useMemo(
     () =>
       new DefaultChatTransport<ProjectChatMessage>({
-        api: `/api/projects/${projectId}/chat`,
+        api: projectId ? `/api/projects/${projectId}/chat` : "/api/chat",
         // Only the newest message travels (plus the thread id passed with each send);
         // the server loads the recent history and the project memory itself.
         prepareSendMessagesRequest: ({ messages, body, trigger }) => ({ body: { ...body, trigger, message: messages[messages.length - 1] } }),
@@ -119,14 +147,42 @@ export function ProjectChat({
     setInput("");
   }
 
-  // What the assistant button heard for this project: sent here as if typed.
+  // What the assistant button heard for this project (or for a new quick chat): sent here as if typed.
+  // A saved quick chat on screen does not take it: "start a chat" means a new one (the page opens it).
   const sendRef = useRef(send);
+  const takesHandOffRef = useRef(true);
   useEffect(() => {
     sendRef.current = send;
+    takesHandOffRef.current = projectId !== null || activeId === null;
   });
+
+  // The mic in the chat box: what is said is sent straight to the AI when the speaker stops.
+  // The browser's speech recognition where it exists; otherwise a short recording, turned into
+  // text with the user's Gemini key (same as the mic button).
+  const speech = useSpeechRecognition({ onFinal: (text) => sendRef.current(text) });
+  const [transcribing, setTranscribing] = useState(false);
+  const recorder = useAudioRecorder({
+    onRecorded: async (audio) => {
+      setTranscribing(true);
+      const form = new FormData();
+      form.append("audio", audio);
+      const result = await safeAction(() => transcribeAudio(form));
+      setTranscribing(false);
+      if (result.ok && result.text) sendRef.current(result.text);
+      else toast.add({ title: result.ok ? "We did not catch that. Try again." : result.error, type: "error" });
+    },
+  });
+  const canSpeak = speech.supported || recorder.supported;
+  const listening = speech.supported ? speech.listening : recorder.recording;
+  const speechError = speech.supported ? speech.error : recorder.error;
+  function toggleMic() {
+    if (listening) return speech.supported ? speech.stop() : recorder.stop();
+    return speech.supported ? speech.start() : recorder.start();
+  }
   useEffect(() => {
     const deliver = () => {
-      const message = takeHandOff(projectId);
+      if (!takesHandOffRef.current) return;
+      const message = takeHandOff(handOffKey);
       if (message) sendRef.current(message);
     };
     // A tick later, so React's development double mount cannot take the message and drop it.
@@ -136,7 +192,7 @@ export function ProjectChat({
       clearTimeout(timer);
       window.removeEventListener(HANDOFF_EVENT, deliver);
     };
-  }, [projectId]);
+  }, [handOffKey]);
 
   function newChat() {
     if (busy) void stop();
@@ -157,6 +213,61 @@ export function ProjectChat({
       toast.add({ title: "Chat deleted", type: "success" });
     });
   }
+
+  /** Destinations for "Move to": the Chat section (when in a project) and every other project. */
+  const destinations = [
+    ...(projectId ? [{ id: "", name: "Chat (no project)" }] : []),
+    ...moveTargets.filter((p) => p.id !== projectId),
+  ];
+
+  function startMoving(t: ThreadRow) {
+    setMoveTo(destinations[0]?.id ?? "");
+    setMoving(t);
+  }
+
+  function move() {
+    if (!moving) return;
+    const target = moveTo || null;
+    const name = destinations.find((d) => d.id === moveTo)?.name ?? "Chat";
+    startMove(async () => {
+      const result = await safeAction(() => moveThread(moving.id, target));
+      if (!result.ok) return void toast.add({ title: result.error, type: "error" });
+      setThreads((t) => t.filter((x) => x.id !== moving.id));
+      if (moving.id === threadRef.current) newChat();
+      const href = `${target ? `/projects/${target}` : "/chat"}?thread=${moving.id}`;
+      setMoving(null);
+      toast.add({
+        title: `Moved to ${name}`,
+        description: target ? "Its facts are being added to the project's memory." : undefined,
+        type: "success",
+        actionProps: { children: "Open", onClick: () => router.push(href) },
+      });
+    });
+  }
+
+  /** The ⋯ menu of one chat: move it, or delete it. */
+  function chatOptions(thread: ThreadRow, className?: string) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" className={className} aria-label={`Options for chat ${thread.title}`} />}>
+          <MoreHorizontalIcon className="size-4" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="min-w-44">
+          {destinations.length ? (
+            <DropdownMenuItem onClick={() => startMoving(thread)}>
+              <FolderInputIcon />
+              Move to...
+            </DropdownMenuItem>
+          ) : null}
+          <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(thread)}>
+            <Trash2Icon />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+  const activeThread = threads.find((t) => t.id === activeId) ?? null;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
@@ -181,15 +292,7 @@ export function ProjectChat({
                   <span className="truncate">{t.title}</span>
                   <span className="text-xs text-muted-foreground">{formatRelative(new Date(t.updatedAt))}</span>
                 </Link>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                  aria-label={`Delete chat ${t.title}`}
-                  onClick={() => setConfirmDelete(t)}
-                >
-                  <Trash2Icon className="size-3.5" />
-                </Button>
+                {chatOptions(t, "absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[popup-open]:opacity-100")}
               </li>
             ))}
           </ul>
@@ -213,6 +316,7 @@ export function ProjectChat({
               </NativeSelectOption>
             ))}
           </NativeSelect>
+          {activeThread ? chatOptions(activeThread, "size-10") : null}
           <Button variant="outline" size="icon-lg" aria-label="New chat" onClick={newChat}>
             <MessageSquarePlusIcon strokeWidth={1.5} />
           </Button>
@@ -225,13 +329,24 @@ export function ProjectChat({
                 <MessagesSquareIcon className="size-5 text-muted-foreground" strokeWidth={1.5} aria-hidden />
               </span>
               <div className="flex flex-col gap-1">
-                <p className="text-[15px]">Tell me anything about this project</p>
-                <p className="max-w-md text-sm text-muted-foreground">
-                  Say or type what happened, for example &ldquo;Himanshu gave Aman 100 rupees&rdquo;. I remember it across all chats in
-                  this project, so you can ask about it any time.
-                </p>
+                {projectId ? (
+                  <>
+                    <p className="text-[15px]">Tell me anything about this project</p>
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      Say or type what happened, for example &ldquo;Himanshu gave Aman 100 rupees&rdquo;. I remember it across all chats in
+                      this project, so you can ask about it any time.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[15px]">Ask me anything</p>
+                    <p className="max-w-md text-sm text-muted-foreground">
+                      A quick chat, not tied to a project. It knows your upcoming reminders. You can move it into a project later.
+                    </p>
+                  </>
+                )}
               </div>
-              {hasMemory && hasKey ? (
+              {projectId && hasMemory && hasKey ? (
                 <ul className="flex flex-wrap justify-center gap-2">
                   {SUGGESTIONS.map((s) => (
                     <li key={s}>
@@ -285,7 +400,9 @@ export function ProjectChat({
           >
             <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border bg-background p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
               <Textarea
-                value={input}
+                // While speaking, the words show here as they are heard.
+                value={listening && speech.transcript ? speech.transcript : input}
+                readOnly={listening || transcribing}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -293,11 +410,26 @@ export function ProjectChat({
                     send(input);
                   }
                 }}
-                placeholder="Type something about this project"
+                placeholder={
+                  listening ? "Listening..." : transcribing ? "Turning your words into text..." : projectId ? "Type or speak about this project" : "Type or speak, ask anything"
+                }
                 aria-label="Message"
                 rows={1}
                 className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
               />
+              {canSpeak && !busy ? (
+                <Button
+                  type="button"
+                  size="icon-lg"
+                  variant={listening ? "destructive" : "ghost"}
+                  aria-label={listening ? "Stop and send" : "Speak your message"}
+                  aria-pressed={listening}
+                  disabled={transcribing}
+                  onClick={toggleMic}
+                >
+                  {transcribing ? <Spinner /> : listening ? <SquareIcon className="fill-current" /> : <MicIcon strokeWidth={1.5} />}
+                </Button>
+              ) : null}
               {busy ? (
                 <Button type="button" size="icon-lg" variant="outline" aria-label="Stop answering" onClick={() => void stop()}>
                   <SquareIcon className="fill-current" />
@@ -308,6 +440,7 @@ export function ProjectChat({
                 </Button>
               )}
             </div>
+            {speechError ? <p className="mx-auto mt-2 max-w-3xl text-xs text-destructive">{speechError}</p> : null}
           </form>
         ) : (
           // Without a key, saved chats stay readable; only sending needs one.
@@ -324,7 +457,7 @@ export function ProjectChat({
         open={confirmDelete !== null}
         onOpenChange={(open) => !open && !deleting && setConfirmDelete(null)}
         title="Delete this chat?"
-        description="Its messages are deleted. Facts already in the project memory stay there."
+        description={projectId ? "Its messages are deleted. Facts already in the project memory stay there." : "Its messages are deleted."}
       >
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button variant="ghost" size="page" onClick={() => setConfirmDelete(null)} disabled={deleting}>
@@ -334,6 +467,32 @@ export function ProjectChat({
             {deleting ? <Spinner /> : <Trash2Icon strokeWidth={1.5} />}
             Delete chat
           </Button>
+        </div>
+      </ResponsiveModal>
+      <ResponsiveModal
+        open={moving !== null}
+        onOpenChange={(open) => !open && !movePending && setMoving(null)}
+        title="Move chat"
+        description={moving ? `"${moving.title}"` : undefined}
+      >
+        <div className="flex flex-col gap-4">
+          <NativeSelect aria-label="Move to" className="w-full" value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+            {destinations.map((d) => (
+              <NativeSelectOption key={d.id || "chat"} value={d.id}>
+                {d.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
+          {moveTo ? <p className="text-sm text-muted-foreground">What this chat says is added to the project&apos;s memory, so its other chats know it too.</p> : null}
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button variant="ghost" size="page" onClick={() => setMoving(null)} disabled={movePending}>
+              Cancel
+            </Button>
+            <Button size="page" onClick={move} disabled={movePending}>
+              {movePending ? <Spinner /> : <FolderInputIcon strokeWidth={1.5} />}
+              Move
+            </Button>
+          </div>
         </div>
       </ResponsiveModal>
     </div>

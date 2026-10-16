@@ -2,23 +2,21 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { Markdown } from "@/components/common/markdown";
-import { Button } from "@/components/ui/button";
 import { browserTimezone, ReminderPreview, type Preview } from "@/components/reminders/new-reminder";
 import { VoiceCapture } from "@/components/reminders/voice-capture";
 import { askAssistant } from "@/app/(app)/assistant/actions";
 import { deleteReminder } from "@/app/(app)/reminders/actions";
 import { toast } from "@/components/ui/toast";
 import { formatReminderTime } from "@/lib/time";
-import { handOff } from "@/lib/assistant/handoff";
+import { handOff, QUICK_CHAT_HANDOFF } from "@/lib/assistant/handoff";
 import { safeAction } from "@/lib/safe-action";
 
-type Step = { kind: "listen" } | { kind: "reminder"; preview: Preview } | { kind: "answer"; heard: string; text: string };
+type Step = { kind: "listen" } | { kind: "reminder"; preview: Preview };
 
 /**
  * Listens (or reads typed text), then does what was asked: a reminder opens
  * the usual preview, project news or questions go to that project's chat,
- * anything else is answered here.
+ * anything else opens a new quick chat (the Chat section).
  */
 export function Assistant({ onDone }: { onDone: () => void }) {
   const router = useRouter();
@@ -36,7 +34,13 @@ export function Assistant({ onDone }: { onDone: () => void }) {
     if (!result.ok) return setError(result.error);
 
     if (result.kind === "reminder") return setStep({ kind: "reminder", preview: { draft: result.draft, heard: text, source, timezone: result.timezone } });
-    if (result.kind === "answer") return setStep({ kind: "answer", heard: text, text: result.text });
+    if (result.kind === "chat") {
+      // A new quick chat; what was said becomes its first message.
+      if (result.message) handOff(QUICK_CHAT_HANDOFF, result.message);
+      router.push("/chat");
+      onDone();
+      return;
+    }
     if (result.kind === "saved") {
       // Saved straight away (the mic is the shortcut); Undo removes it again.
       onDone();
@@ -65,23 +69,6 @@ export function Assistant({ onDone }: { onDone: () => void }) {
     return (
       <div className="flex flex-col gap-4">
         <ReminderPreview preview={step.preview} onCancel={() => setStep({ kind: "listen" })} onSaved={onDone} />
-      </div>
-    );
-  }
-
-  if (step.kind === "answer") {
-    return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">You said: “{step.heard}”</p>
-        <Markdown>{step.text}</Markdown>
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button variant="ghost" size="page" onClick={onDone}>
-            Done
-          </Button>
-          <Button size="page" onClick={() => setStep({ kind: "listen" })}>
-            Ask something else
-          </Button>
-        </div>
       </div>
     );
   }

@@ -6,15 +6,18 @@
 const pending = new Map<string, string>();
 
 export const HANDOFF_EVENT = "assistant:handoff";
+/** The key for a message going to a new quick chat (the Chat section). */
+export const QUICK_CHAT_HANDOFF = "quick-chat";
 
-export function handOff(projectId: string, message: string) {
-  pending.set(projectId, message);
+/** `key` is a project id, or QUICK_CHAT_HANDOFF for a new quick chat. */
+export function handOff(key: string, message: string) {
+  pending.set(key, message);
   // The chat may already be open (the user is on that project): tell it now.
   window.dispatchEvent(new Event(HANDOFF_EVENT));
 }
 
-export function takeHandOff(projectId: string): string | null {
-  const message = pending.get(projectId) ?? null;
-  pending.delete(projectId);
+export function takeHandOff(key: string): string | null {
+  const message = pending.get(key) ?? null;
+  pending.delete(key);
   return message;
 }

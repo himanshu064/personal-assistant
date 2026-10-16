@@ -7,12 +7,12 @@ import { AssistantTab } from "@/components/assistant/assistant-button";
 import { NAV_ITEMS, isActive } from "@/lib/constants/nav";
 import { useOptimisticPathname } from "@/hooks/use-optimistic-pathname";
 
-/** Settings is in the account menu on phones, so the middle slot can hold the assistant. */
+/** Settings is in the account menu on phones. Home, Reminders, Chat, (mic), Inbox, Projects. */
 const TABS = NAV_ITEMS.filter((item) => item.href !== "/settings");
 
 /**
- * Phone navigation, fixed to the bottom within thumb reach: two sections,
- * the assistant mic in the middle, two sections. The bottom padding keeps it
+ * Phone navigation, fixed to the bottom within thumb reach: three sections,
+ * the raised assistant mic, then two sections. The bottom padding keeps it
  * clear of the iPhone home bar.
  */
 export function BottomTabBar() {
@@ -36,12 +36,12 @@ function LiveTabs() {
 
 function Tabs({ pathname, onNavigate }: { pathname: string; onNavigate: (href: string) => React.MouseEventHandler | undefined }) {
   return (
-    <ul className="mx-auto grid max-w-lg grid-cols-5">
+    <ul className="mx-auto grid max-w-lg grid-cols-6">
       {TABS.map((item, index) => {
         const active = isActive(pathname, item.href);
         return (
           <Fragment key={item.href}>
-            {index === 2 ? (
+            {index === 3 ? (
               <li>
                 <AssistantTab />
               </li>

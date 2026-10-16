@@ -1,0 +1,2 @@
+ALTER TABLE "chat_threads" ALTER COLUMN "project_id" DROP NOT NULL;--> statement-breakpoint
+CREATE INDEX "chat_threads_quick_idx" ON "chat_threads" USING btree ("user_id","updated_at" DESC NULLS LAST) WHERE "chat_threads"."project_id" is null;
