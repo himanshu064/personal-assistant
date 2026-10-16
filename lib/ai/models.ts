@@ -1,58 +1,31 @@
 import "server-only";
-import { z } from "zod";
-import { AI_PROVIDERS, type AiProvider } from "./providers";
-
-const list = z
-  .string()
-  .transform((v) => v.split(",").map((s) => s.trim()).filter(Boolean))
-  .pipe(z.array(z.string()).min(1));
+import type { AiProvider } from "./providers";
 
 /**
- * Model settings from .env. Parsed once at startup so a typo fails loudly
- * instead of silently sending users to a model that does not exist.
+ * Built in defaults: the cheapest model of each provider. Used before a key
+ * is saved, for background work (project memory, Gmail), and when a
+ * provider's model list cannot be read. Every other model a user can pick
+ * comes live from their own key (see lib/ai/list-models.ts).
  */
-const env = z
-  .object({
-    AI_DEFAULT_PROVIDER: z.enum(AI_PROVIDERS).default("google"),
-    AI_DEFAULT_MODEL_ANTHROPIC: z.string().min(1),
-    AI_DEFAULT_MODEL_GOOGLE: z.string().min(1),
-    AI_ALLOWED_MODELS_ANTHROPIC: list,
-    AI_ALLOWED_MODELS_GOOGLE: list,
-  })
-  .superRefine((v, ctx) => {
-    if (!v.AI_ALLOWED_MODELS_ANTHROPIC.includes(v.AI_DEFAULT_MODEL_ANTHROPIC)) {
-      ctx.addIssue({ code: "custom", message: "AI_DEFAULT_MODEL_ANTHROPIC must be in AI_ALLOWED_MODELS_ANTHROPIC" });
-    }
-    if (!v.AI_ALLOWED_MODELS_GOOGLE.includes(v.AI_DEFAULT_MODEL_GOOGLE)) {
-      ctx.addIssue({ code: "custom", message: "AI_DEFAULT_MODEL_GOOGLE must be in AI_ALLOWED_MODELS_GOOGLE" });
-    }
-  })
-  .parse(process.env);
-
-export type ModelCatalog = {
-  defaultProvider: AiProvider;
-  providers: Record<AiProvider, { defaultModel: string; models: string[] }>;
-};
-
-export const MODEL_CATALOG: ModelCatalog = {
-  defaultProvider: env.AI_DEFAULT_PROVIDER,
+export const MODEL_CATALOG: { defaultProvider: AiProvider; providers: Record<AiProvider, { defaultModel: string }> } = {
+  defaultProvider: "google",
   providers: {
-    anthropic: { defaultModel: env.AI_DEFAULT_MODEL_ANTHROPIC, models: env.AI_ALLOWED_MODELS_ANTHROPIC },
-    google: { defaultModel: env.AI_DEFAULT_MODEL_GOOGLE, models: env.AI_ALLOWED_MODELS_GOOGLE },
+    anthropic: { defaultModel: "claude-haiku-5-5" },
+    google: { defaultModel: "gemini-2.5-flash-lite" },
   },
 };
 
-export function isAllowedModel(provider: AiProvider, model: string) {
-  return MODEL_CATALOG.providers[provider].models.includes(model);
+/** True when the model id is one of that provider's (so a Claude model is never sent to Google). */
+export function modelBelongsTo(provider: AiProvider, model: string) {
+  return provider === "anthropic" ? model.startsWith("claude-") : model.startsWith("gemini-");
 }
 
 /**
- * The provider and model a user actually gets: their saved choice when it is
- * still allowed, otherwise the defaults (the cheapest models).
+ * The provider and model a user actually gets: their saved choice when it
+ * belongs to the provider, otherwise the defaults (the cheapest models).
  */
 export function resolveModelChoice(saved: { provider: AiProvider | null; model: string | null }) {
   const provider = saved.provider ?? MODEL_CATALOG.defaultProvider;
-  const model =
-    saved.model && isAllowedModel(provider, saved.model) ? saved.model : MODEL_CATALOG.providers[provider].defaultModel;
+  const model = saved.model && modelBelongsTo(provider, saved.model) ? saved.model : MODEL_CATALOG.providers[provider].defaultModel;
   return { provider, model };
 }

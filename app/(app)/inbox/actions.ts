@@ -4,7 +4,7 @@ import { updateTag } from "next/cache";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { account, emailItems, gmailSync } from "@/db/schema";
+import { emailItems, gmailSync } from "@/db/schema";
 import { inboxTag } from "@/lib/data/inbox-tags";
 import { getGmailAccessToken } from "@/lib/gmail/connection";
 import { syncGmail } from "@/lib/gmail/sync";
@@ -58,9 +58,9 @@ export async function setSuggestionStatus(id: unknown, status: unknown): Promise
 }
 
 /**
- * Disconnects one Gmail: asks Google to revoke access, then deletes its
- * stored tokens. Its sync record and suggestions go with it (foreign key
- * cascade). Other Gmails and reminders already made stay.
+ * Disconnects one Gmail: asks Google to revoke access, then deletes its row
+ * (tokens included). Its suggestions go with it (foreign key cascade). Other
+ * Gmails and reminders already made stay.
  */
 export async function disconnectGmail(accountId: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
@@ -86,7 +86,7 @@ export async function disconnectGmail(accountId: unknown): Promise<{ ok: true } 
     console.warn("gmail.revoke_failed", { message: error instanceof Error ? error.message : String(error) });
   }
 
-  await db.delete(account).where(and(eq(account.id, connection.accountId), eq(account.userId, user.id)));
+  await db.delete(gmailSync).where(and(eq(gmailSync.accountId, connection.accountId), eq(gmailSync.userId, user.id)));
   updateTag(inboxTag(user.id));
   return { ok: true };
 }

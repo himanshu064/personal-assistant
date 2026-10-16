@@ -9,7 +9,7 @@ import { SyncWatcher } from "@/components/inbox/sync-watcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { getMyGmails, getMyInbox, type GmailConnection, type InboxStatus } from "@/lib/data/inbox";
-import { getMySettings } from "@/lib/data/settings";
+import { getMyGoogleClient, getMySettings } from "@/lib/data/settings";
 import { formatRelative } from "@/lib/time";
 
 export const metadata: Metadata = { title: "Inbox" };
@@ -66,7 +66,10 @@ async function InboxContent({ searchParams }: { searchParams: PageProps<"/inbox"
   const sp = await searchParams;
   const gmails = await getMyGmails();
   const errorCode = typeof sp.error === "string" ? sp.error : undefined;
-  if (gmails.length === 0) return <ConnectGmail failed={sp.gmail_error !== undefined} errorCode={errorCode} />;
+  if (gmails.length === 0) {
+    const google = await getMyGoogleClient();
+    return <ConnectGmail failed={sp.gmail_error !== undefined} errorCode={errorCode} googleReady={google !== null} />;
+  }
 
   const status: InboxStatus = sp.status === "added" || sp.status === "dismissed" ? sp.status : "new";
   const [{ items, counts }, settings] = await Promise.all([getMyInbox(status), getMySettings()]);

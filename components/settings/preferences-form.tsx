@@ -12,7 +12,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { savePreferences } from "@/app/(app)/settings/actions";
-import type { ModelCatalog } from "@/lib/ai/models";
+import type { ModelOption } from "@/lib/ai/list-models";
 import { AI_PROVIDERS, PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
 import { LEAD_TIME_LABELS, LEAD_TIME_OPTIONS } from "@/lib/validation/reminders";
 import { preferencesSchema, type PreferencesInput, type PreferencesValues } from "@/lib/validation/settings";
@@ -25,7 +25,8 @@ export function PreferencesForm({
   initial,
   savedProviders,
 }: {
-  catalog: ModelCatalog;
+  /** Per provider: its cheapest model, and the models the user's key can use (live from the provider). */
+  catalog: Record<AiProvider, { defaultModel: string; models: ModelOption[] }>;
   initial: { timezone: string | null; provider: AiProvider; model: string; defaultLeadMinutes: number };
   savedProviders: AiProvider[];
 }) {
@@ -60,12 +61,12 @@ export function PreferencesForm({
   });
 
   const provider = useWatch({ control, name: "provider" });
-  const models = catalog.providers[provider].models;
+  const models = catalog[provider].models;
 
   /** Switching provider picks that provider's default (cheapest) model if the current one is not offered. */
   function onProviderChange(next: AiProvider) {
-    if (!catalog.providers[next].models.includes(getValues("model"))) {
-      setValue("model", catalog.providers[next].defaultModel, { shouldDirty: true });
+    if (!catalog[next].models.some((m) => m.id === getValues("model"))) {
+      setValue("model", catalog[next].defaultModel, { shouldDirty: true });
     }
   }
 
@@ -138,11 +139,14 @@ export function PreferencesForm({
               <FieldLabel htmlFor="model">Model</FieldLabel>
               <NativeSelect id="model" className={selectClass} aria-invalid={errors.model ? true : undefined} {...register("model")}>
                 {models.map((m) => (
-                  <NativeSelectOption key={m} value={m}>
-                    {m === catalog.providers[provider].defaultModel ? `${m} (default, lowest cost)` : m}
+                  <NativeSelectOption key={m.id} value={m.id}>
+                    {m.id === catalog[provider].defaultModel ? `${m.id} (default, lowest cost)` : m.label === m.id ? m.id : `${m.label} (${m.id})`}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
+              <FieldDescription>
+                {hasKeyForProvider ? "The models your key can use, straight from the provider." : "Add a key to see every model your key can use."}
+              </FieldDescription>
               {errors.model ? <FieldError>{errors.model.message}</FieldError> : null}
             </Field>
             <FormError message={errors.root?.message} />

@@ -52,7 +52,7 @@ Both jobs run at the same minutes on purpose: Neon puts the database to sleep af
 
 ## Gmail
 
-Gmail needs a Google Cloud project with the Gmail API turned on, an OAuth client (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`), and the redirect URI `<your domain>/api/auth/callback/google`. While the app is in Google's Testing mode, only listed test users can connect, and they reconnect every 7 days.
+Each user connects Gmail through **their own** Google app (OAuth client); nothing Google related is in `.env`. In the app: **Settings > Google** has the steps (info icons), the exact Redirect URL to register (`<your domain>/api/gmail/callback`), the Client ID and secret fields, and "Test connection". The secret is stored encrypted with `ENCRYPTION_KEY`. While a Google app is in Testing mode, only its listed test users can connect, and they reconnect every 7 days.
 
 ## Deploying to Vercel
 

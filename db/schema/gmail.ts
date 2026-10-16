@@ -1,26 +1,45 @@
 import { relations, sql } from "drizzle-orm";
 import { index, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
-import { account, user } from "./auth";
+import { user } from "./auth";
 import { emailItemFoundByEnum, emailItemKindEnum, emailItemStatusEnum, gmailSyncStatusEnum } from "./enums";
 import { reminders } from "./reminders";
 
 /**
- * One row per connected Gmail; a user can connect several. The tokens
- * themselves stay in Better Auth's `account` table (encrypted); this row
- * tracks syncing.
+ * The user's own Google OAuth client (from their Google Cloud project), used
+ * to connect their Gmail. The secret is encrypted with ENCRYPTION_KEY.
+ */
+export const googleOauthClients = pgTable("google_oauth_clients", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull(),
+  encryptedSecret: text("encrypted_secret").notNull(),
+  secretLast4: text("secret_last4").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+/**
+ * One row per connected Gmail; a user can connect several. Holds its tokens
+ * (encrypted, issued to the user's own Google client) and tracks syncing.
  */
 export const gmailSync = pgTable(
   "gmail_sync",
   {
-    /** Better Auth's account row for this Google account (used to get a fresh access token). */
-    accountId: uuid("account_id")
-      .primaryKey()
-      .references(() => account.id, { onDelete: "cascade" }),
+    /** This Gmail connection's id (email_items point to it). */
+    accountId: uuid("account_id").primaryKey().defaultRandom(),
     userId: uuid("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The Gmail address, read from Gmail on the first sync. */
+    /** The Gmail address. Reconnecting the same address updates this row. */
     email: text("email"),
+    /** Encrypted. Null when Gmail must be connected again (for example after changing the Google client). */
+    encryptedRefreshToken: text("encrypted_refresh_token"),
+    encryptedAccessToken: text("encrypted_access_token"),
+    accessTokenExpiresAt: timestamp("access_token_expires_at", { withTimezone: true }),
     status: gmailSyncStatusEnum("status").notNull().default("active"),
     /** Why reconnecting is needed, in plain words, when status is needs_reconnect. */
     problem: text("problem"),
@@ -38,6 +57,7 @@ export const gmailSync = pgTable(
   (t) => [
     index("gmail_sync_due_idx").on(t.lastSyncedAt).where(sql`${t.status} = 'active'`),
     index("gmail_sync_user_idx").on(t.userId),
+    uniqueIndex("gmail_sync_user_email_uidx").on(t.userId, t.email).where(sql`${t.email} is not null`),
   ],
 );
 
@@ -55,7 +75,7 @@ export const emailItems = pgTable(
     /** The Gmail it was found in. Disconnecting that Gmail deletes its rows. */
     accountId: uuid("account_id")
       .notNull()
-      .references(() => account.id, { onDelete: "cascade" }),
+      .references(() => gmailSync.accountId, { onDelete: "cascade" }),
     gmailMessageId: text("gmail_message_id").notNull(),
     threadId: text("thread_id").notNull(),
     fromName: text("from_name").notNull(),

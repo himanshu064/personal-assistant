@@ -85,6 +85,13 @@
       "when": 1792129511200,
       "tag": "0011_single_alert_setting",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1792138721691,
+      "tag": "0012_own_google_client",
+      "breakpoints": true
     }
   ]
 }

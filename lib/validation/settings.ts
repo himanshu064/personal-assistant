@@ -26,6 +26,20 @@ export const apiKeySchema = z.object({
 });
 export type ApiKeyValues = z.infer<typeof apiKeySchema>;
 
+export const googleClientSchema = z.object({
+  clientId: z
+    .string()
+    .trim()
+    .regex(/^[\w-]+\.apps\.googleusercontent\.com$/, "A Client ID ends with .apps.googleusercontent.com. Copy the whole value."),
+  clientSecret: z
+    .string()
+    .trim()
+    .min(10, "This looks too short to be a Client secret.")
+    .max(200, "This looks too long to be a Client secret.")
+    .refine((v) => !/\s/.test(v), "A Client secret has no spaces."),
+});
+export type GoogleClientValues = z.infer<typeof googleClientSchema>;
+
 export const keyIdSchema = z.object({ id: z.uuid() });
 
 /** True when the runtime knows this IANA timezone name. */

@@ -2,7 +2,7 @@ import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
 import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { aiKeys, aiUsage, userSettings } from "@/db/schema";
+import { aiKeys, aiUsage, googleOauthClients, userSettings } from "@/db/schema";
 import { resolveModelChoice } from "@/lib/ai/models";
 import { DEFAULT_LEAD_MINUTES } from "@/lib/validation/reminders";
 import { requireUser } from "@/lib/session";
@@ -93,4 +93,22 @@ export async function getMyKeyUsage(): Promise<KeyUsageRow[]> {
     .where(and(eq(aiUsage.userId, user.id), gt(aiUsage.createdAt, since)))
     .groupBy(aiUsage.keyId, aiUsage.model)
     .orderBy(desc(total));
+}
+
+/** The user's own Google client for Gmail, or null. Never the secret, only its last 4 characters. */
+export async function getMyGoogleClient() {
+  const user = await requireUser();
+  return readGoogleClient(user.id);
+}
+
+async function readGoogleClient(userId: string) {
+  "use cache";
+  cacheTag(settingsTag(userId));
+  cacheLife("minutes");
+  const [row] = await db
+    .select({ clientId: googleOauthClients.clientId, secretLast4: googleOauthClients.secretLast4, updatedAt: googleOauthClients.updatedAt })
+    .from(googleOauthClients)
+    .where(eq(googleOauthClients.userId, userId))
+    .limit(1);
+  return row ?? null;
 }

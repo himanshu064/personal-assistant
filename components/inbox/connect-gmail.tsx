@@ -1,35 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarClockIcon, EyeIcon, MailIcon, ShieldCheckIcon } from "lucide-react";
+import Link from "next/link";
+import { CalendarClockIcon, EyeIcon, MailIcon, SettingsIcon, ShieldCheckIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { authClient } from "@/lib/auth-client";
-import { GMAIL_SCOPE } from "@/lib/gmail/scope";
 
-/** Sends the user to Google to allow read only Gmail access, then back to the Inbox. */
+/**
+ * Sends the user to Google (through /api/gmail/connect, with their own Google
+ * app) to allow read only Gmail access, then back to the Inbox. Without a
+ * Google app saved, that route opens Settings > Google instead.
+ */
 export function useConnectGmail() {
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function connect() {
+  async function connect(): Promise<string | null> {
     setConnecting(true);
-    setError(null);
-    const { error } = await authClient.linkSocial({
-      provider: "google",
-      scopes: [GMAIL_SCOPE],
-      callbackURL: "/inbox?connected=1",
-      errorCallbackURL: "/inbox?gmail_error=1",
-    });
-    // On success the browser is already leaving for Google.
-    if (!error) return null;
-    const message = error.status === 429 ? "Too many attempts. Wait a minute and try again." : "Could not open Google. Try again.";
-    setConnecting(false);
-    setError(message);
-    return message;
+    // A full page load, not router.push: the route redirects off site to Google's consent screen.
+    window.location.assign(new URL("/api/gmail/connect", window.location.origin));
+    return null;
   }
 
-  return { connect, connecting, error };
+  return { connect, connecting, error: null as string | null };
 }
 
 const POINTS = [
@@ -38,10 +30,13 @@ const POINTS = [
   { icon: ShieldCheckIcon, text: "Meeting invites become reminders by themselves. Everything else waits until you tap Create reminder." },
 ];
 
-/** Better Auth sends ?error=<code> back when linking fails. */
+/** /api/gmail/callback sends ?error=<code> back when connecting fails. */
 const LINK_ERRORS: Record<string, string> = {
   access_denied: "Gmail was not connected because access was not allowed on Google's screen.",
-  account_already_linked_to_different_user: "That Gmail is already connected to another account in this app.",
+  state_mismatch: "That sign in took too long or was opened in another tab. Try Connect Gmail again.",
+  no_client: "Set up your Google app in Settings > Google first.",
+  exchange_failed:
+    "Google did not finish connecting. Check your Google app in Settings > Google (Test connection), and that the Redirect URL is added in Google Cloud.",
 };
 
 /** The message for a failed connect, from Better Auth's ?error=<code>. */
@@ -52,7 +47,7 @@ export function linkErrorMessage(errorCode?: string) {
   );
 }
 
-export function ConnectGmail({ failed, errorCode }: { failed?: boolean; errorCode?: string }) {
+export function ConnectGmail({ failed, errorCode, googleReady }: { failed?: boolean; errorCode?: string; googleReady: boolean }) {
   const { connect, connecting, error } = useConnectGmail();
   const message = error ?? (failed ? linkErrorMessage(errorCode) : null);
 
@@ -75,10 +70,20 @@ export function ConnectGmail({ failed, errorCode }: { failed?: boolean; errorCod
           </li>
         ))}
       </ul>
-      <Button size="page" onClick={connect} disabled={connecting}>
-        {connecting ? <Spinner /> : <MailIcon strokeWidth={1.5} />}
-        Connect Gmail
-      </Button>
+      {googleReady ? (
+        <Button size="page" onClick={connect} disabled={connecting}>
+          {connecting ? <Spinner /> : <MailIcon strokeWidth={1.5} />}
+          Connect Gmail
+        </Button>
+      ) : (
+        <div className="flex flex-col items-center gap-3">
+          <p className="max-w-md text-sm text-muted-foreground">First, set up your own Google app (about 5 minutes, steps included).</p>
+          <Button size="page" nativeButton={false} render={<Link href="/settings/google" />}>
+            <SettingsIcon strokeWidth={1.5} />
+            Set up Google app
+          </Button>
+        </div>
+      )}
       {message ? (
         <p role="alert" className="max-w-md text-sm text-destructive">
           {message}

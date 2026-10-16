@@ -3,14 +3,17 @@
 import { and, eq, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db } from "@/db";
-import { aiKeys, userSettings } from "@/db/schema";
-import { isAllowedModel, MODEL_CATALOG, resolveModelChoice } from "@/lib/ai/models";
+import { aiKeys, gmailSync, googleOauthClients, userSettings } from "@/db/schema";
+import { getMyModelOptions } from "@/lib/ai/list-models";
+import { MODEL_CATALOG, modelBelongsTo, resolveModelChoice } from "@/lib/ai/models";
 import { PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
 import { verifyApiKey } from "@/lib/ai/verify-key";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { inboxTag } from "@/lib/data/inbox-tags";
 import { settingsTag } from "@/lib/data/settings";
+import { getGoogleClient, gmailRedirectUri, requestOrigin, testGoogleClient } from "@/lib/gmail/google-oauth";
 import { requireUser } from "@/lib/session";
-import { apiKeySchema, isValidTimezone, keyIdSchema, preferencesSchema } from "@/lib/validation/settings";
+import { apiKeySchema, googleClientSchema, isValidTimezone, keyIdSchema, preferencesSchema } from "@/lib/validation/settings";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string; field?: string };
 
@@ -21,7 +24,9 @@ export async function savePreferences(input: unknown): Promise<ActionResult> {
 
   const { timezone, provider, model, defaultLeadMinutes } = parsed.data;
   if (!isValidTimezone(timezone)) return { ok: false, error: "Unknown timezone.", field: "timezone" };
-  if (!isAllowedModel(provider, model)) return { ok: false, error: "That model is not available.", field: "model" };
+  // Only a model the user's own key lists (or the built in default). The list is cached per key.
+  const options = await getMyModelOptions();
+  if (!options[provider].some((m) => m.id === model)) return { ok: false, error: "That model is not available with your key.", field: "model" };
 
   // One round trip: insert, or update when the row already exists.
   await db
@@ -98,7 +103,7 @@ export async function selectApiKey(input: unknown): Promise<ActionResult> {
   ]);
   if (!key) return { ok: false, error: "This key no longer exists." };
   // Keep the chosen model when the provider offers it, else its cheapest.
-  const model = settings?.model && isAllowedModel(key.provider, settings.model) ? settings.model : MODEL_CATALOG.providers[key.provider].defaultModel;
+  const model = settings?.model && modelBelongsTo(key.provider, settings.model) ? settings.model : MODEL_CATALOG.providers[key.provider].defaultModel;
 
   await db.transaction(async (tx) => {
     // Off first, then on: the unique index allows one key in use per provider.
@@ -171,4 +176,62 @@ async function switchToProviderWithKey(userId: string, candidate: AiProvider): P
 
 function switchedMessage(provider: AiProvider | null) {
   return provider ? ` ${PROVIDER_LABELS[provider]} is now your AI provider.` : "";
+}
+
+/** What a Gmail connection becomes when the Google client it was made with changes or goes away. */
+const GOOGLE_CLIENT_CHANGED = {
+  status: "needs_reconnect" as const,
+  problem: "Your Google app changed. Reconnect this Gmail to keep getting suggestions.",
+  encryptedRefreshToken: null,
+  encryptedAccessToken: null,
+  accessTokenExpiresAt: null,
+};
+
+/**
+ * Saves the user's own Google client for Gmail, after checking it with Google.
+ * A new Client ID makes connected Gmails reconnect: Google ties their tokens
+ * to the client that issued them. A new secret for the same ID does not.
+ */
+export async function saveGoogleClient(input: unknown): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = googleClientSchema.safeParse(input);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return { ok: false, error: issue?.message ?? "Check the values.", field: issue?.path[0] === "clientSecret" ? "clientSecret" : "clientId" };
+  }
+  const { clientId, clientSecret } = parsed.data;
+
+  const [check, [existing]] = await Promise.all([
+    testGoogleClient({ clientId, clientSecret }, gmailRedirectUri(await requestOrigin())),
+    db.select({ clientId: googleOauthClients.clientId }).from(googleOauthClients).where(eq(googleOauthClients.userId, user.id)).limit(1),
+  ]);
+  if (!check.ok) return { ok: false, error: check.message, field: /secret/i.test(check.message) ? "clientSecret" : "clientId" };
+
+  const values = { clientId, encryptedSecret: encrypt(clientSecret), secretLast4: clientSecret.slice(-4) };
+  await db.insert(googleOauthClients).values({ userId: user.id, ...values }).onConflictDoUpdate({ target: googleOauthClients.userId, set: values });
+  const reconnect = existing && existing.clientId !== clientId;
+  if (reconnect) await db.update(gmailSync).set(GOOGLE_CLIENT_CHANGED).where(eq(gmailSync.userId, user.id));
+
+  updateTag(settingsTag(user.id));
+  updateTag(inboxTag(user.id));
+  return { ok: true, message: reconnect ? "Google app checked and saved. Reconnect your Gmail in the Inbox." : "Google app checked and saved. You can connect Gmail now." };
+}
+
+/** "Test connection": checks the saved Client ID and secret with Google again. */
+export async function testSavedGoogleClient(): Promise<ActionResult> {
+  const user = await requireUser();
+  const client = await getGoogleClient(user.id);
+  if (!client) return { ok: false, error: "Save your Google app first." };
+  const check = await testGoogleClient(client, gmailRedirectUri(await requestOrigin()));
+  return check.ok ? { ok: true, message: "Connection works. Google accepted your Client ID and secret." } : { ok: false, error: check.message };
+}
+
+/** Removes the Google client. Connected Gmails stop syncing until a client is added and they are reconnected. */
+export async function deleteGoogleClient(): Promise<ActionResult> {
+  const user = await requireUser();
+  await db.delete(googleOauthClients).where(eq(googleOauthClients.userId, user.id));
+  await db.update(gmailSync).set(GOOGLE_CLIENT_CHANGED).where(eq(gmailSync.userId, user.id));
+  updateTag(settingsTag(user.id));
+  updateTag(inboxTag(user.id));
+  return { ok: true, message: "Google app removed. Gmail stops syncing until you add one and reconnect." };
 }
