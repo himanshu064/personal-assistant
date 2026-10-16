@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { AlarmClockIcon, BellIcon, CalendarCheckIcon, CircleCheckIcon, ListChecksIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { AlarmClockIcon, BellIcon, CalendarCheckIcon, CircleCheckIcon, MoveRightIcon } from "lucide-react";
 import { Page } from "@/components/app-shell/page";
 import { NewReminderButton } from "@/components/reminders/new-reminder-button";
 import { NotificationsPrompt } from "@/components/reminders/notifications-prompt";
@@ -22,15 +21,7 @@ export default function DashboardPage() {
           <Greeting />
         </Suspense>
       }
-      actions={
-        <>
-          <NewReminderButton />
-          <Button size="page" variant="outline" nativeButton={false} render={<Link href="/reminders" />}>
-            <ListChecksIcon strokeWidth={1.5} />
-            All reminders
-          </Button>
-        </>
-      }
+      actions={<NewReminderButton />}
     >
       <NotificationsPrompt />
 
@@ -43,8 +34,9 @@ export default function DashboardPage() {
           <CardTitle>Up next</CardTitle>
           <CardDescription>Your next five reminders.</CardDescription>
           <CardAction>
-            <Link href="/reminders" className="text-sm font-medium underline-offset-4 hover:underline">
+            <Link href="/reminders" className="inline-flex items-center gap-1.5 text-sm font-medium underline-offset-4 hover:underline">
               View all
+              <MoveRightIcon className="size-4" strokeWidth={1.75} aria-hidden />
             </Link>
           </CardAction>
         </CardHeader>

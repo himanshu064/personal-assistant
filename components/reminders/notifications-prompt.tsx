@@ -52,7 +52,8 @@ export function NotificationsPrompt() {
       <BellIcon />
       <AlertTitle>Turn on notifications</AlertTitle>
       <AlertDescription>So your reminders reach you even when the app is closed.</AlertDescription>
-      <AlertAction>
+      {/* Centred on the banner's two lines, not pinned to the top. */}
+      <AlertAction className="top-1/2 -translate-y-1/2">
         <Button size="sm" onClick={push.subscribe} disabled={push.busy}>
           {push.busy ? <Spinner /> : null}
           Turn on

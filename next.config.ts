@@ -9,6 +9,9 @@ const nextConfig: NextConfig = {
   // The dev server logs every Server Function call with its arguments, which
   // would print API keys and other secrets from saveApiKey in plain text.
   logging: { serverFunctions: false },
+  // Development only: the Next.js badge defaults to bottom left, on top of the
+  // sidebar's Expand button; bottom right has the mic button.
+  devIndicators: { position: "top-right" },
   turbopack: {
     rules: {
       "*.css": {

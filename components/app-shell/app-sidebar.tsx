@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { Suspense, type ReactNode } from "react";
+import { PanelLeftOpenIcon } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -14,6 +16,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { NAV_ITEMS, isActive, type NavItem } from "@/lib/constants/nav";
 import { CommandSearch } from "./command-search";
@@ -68,6 +71,26 @@ function SectionLinks({ items }: { items: NavItem[] }) {
 }
 
 /**
+ * At the bottom, only while collapsed: the collapse button next to the name
+ * is hidden then, so this is the way back to the full sidebar.
+ */
+function ExpandButton() {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <SidebarFooter className="hidden pb-3 group-data-[collapsible=icon]:flex">
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton tooltip="Expand sidebar" aria-label="Expand sidebar" className={itemClass} onClick={toggleSidebar}>
+            <PanelLeftOpenIcon strokeWidth={1.5} />
+            <span>Expand sidebar</span>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarFooter>
+  );
+}
+
+/**
  * Desktop navigation on the warm grey canvas: account card, search, then
  * sections. Phones use the bottom tab bar instead.
  */
@@ -100,6 +123,7 @@ export function AppSidebar({ account }: { account: ReactNode }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
+      <ExpandButton />
       {/* Click the edge (or press Cmd/Ctrl B) to collapse or expand. */}
       <SidebarRail />
     </Sidebar>
