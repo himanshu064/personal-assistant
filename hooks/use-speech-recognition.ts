@@ -30,6 +30,8 @@ const noopSubscribe = () => () => {};
 
 /** Listening ends this long after the last word heard (the user has finished speaking). */
 const SILENCE_MS = 2000;
+/** Nothing heard this long after tapping the mic: stop (some browsers never end by themselves). */
+const NO_SPEECH_MS = 8000;
 /** iPhone: the gap before listening again after a phrase ends (from the iOS guide below). */
 const IOS_RESTART_MS = 200;
 
@@ -131,14 +133,14 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
     setError(null);
     setListening(true);
 
-    /** Silence for SILENCE_MS after the last word ends the turn. */
-    const armSilence = () => {
+    /** Silence for SILENCE_MS after the last word (NO_SPEECH_MS before the first) ends the turn. */
+    const armSilence = (ms = SILENCE_MS) => {
       if (silenceRef.current) clearTimeout(silenceRef.current);
       silenceRef.current = setTimeout(() => {
         wantedRef.current = false;
         if (recognitionRef.current) recognitionRef.current.stop();
         else finish();
-      }, SILENCE_MS);
+      }, ms);
     };
 
     const listen = () => {
@@ -158,7 +160,8 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
             // Android can send finished words twice, the copy with confidence 0: skip the copy
             // only (a lone confidence 0 result is kept, so no sentence is lost).
             const words = tidy(result[0].transcript);
-            if (where === "android" && result[0].confidence === 0 && finals.includes(words)) continue;
+            const repeated = finals.some((kept) => kept.toLowerCase() === words.toLowerCase());
+            if (where === "android" && result[0].confidence === 0 && repeated) continue;
             finals.push(words);
           } else {
             interims.push(result[0].transcript);
@@ -204,6 +207,7 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
       }
     };
 
+    armSilence(NO_SPEECH_MS);
     listen();
   }, [finish]);
 
