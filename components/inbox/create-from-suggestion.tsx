@@ -8,9 +8,6 @@ import type { InboxItem } from "@/lib/data/inbox";
 import { safeAction } from "@/lib/safe-action";
 import { toLocalInputValue } from "@/lib/time";
 
-/** Meetings alert 10 minutes early by default, so there is time to join. */
-const MEETING_LEAD_MINUTES = 10;
-
 /**
  * The same preview card as a spoken reminder, filled in from the email. The
  * user can change anything; nothing is saved until they tap Save.
@@ -46,7 +43,8 @@ export function CreateFromSuggestion({
           title: item.title,
           remindAt: item.startsAt ? toLocalInputValue(new Date(item.startsAt), timezone) : "",
           notes,
-          leadMinutes: item.kind === "meeting" ? Math.max(defaultLeadMinutes, MEETING_LEAD_MINUTES) : defaultLeadMinutes,
+          // The one "Alert me" setting, the same as for meetings added by themselves.
+          leadMinutes: defaultLeadMinutes,
         }}
         timezone={timezone}
         submitLabel="Save reminder"

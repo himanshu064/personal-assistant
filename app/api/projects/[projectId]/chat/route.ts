@@ -1,6 +1,6 @@
 import { after, NextResponse, type NextRequest } from "next/server";
 import { revalidateTag } from "next/cache";
-import { createUIMessageStreamResponse, generateId, streamText, toUIMessageStream, type ModelMessage, type ToolSet } from "ai";
+import { createUIMessageStreamResponse, generateId, streamText, toUIMessageStream, type LanguageModelUsage, type ModelMessage, type ToolSet } from "ai";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
       .from(projects)
       .where(and(eq(projects.id, projectId), eq(projects.userId, userId)))
       .limit(1),
-    getDraftContext(userId),
+    getDraftContext(userId, "chat"),
     db
       .select({ projectId: chatThreads.projectId, userId: chatThreads.userId })
       .from(chatThreads)
@@ -130,13 +130,14 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
   let finishAnswer: (text: string) => void = () => {};
   const answered = new Promise<string>((resolve) => (finishAnswer = resolve));
   const assistantId = generateId();
+  const usageOf = (u: LanguageModelUsage) => ({ inputTokens: u.inputTokens ?? 0, outputTokens: u.outputTokens ?? 0, model: context.modelId });
 
   /**
    * Saves the question and the FULL reply. Runs from streamText's onEnd, which
    * gets the model's whole text even if the browser left mid answer, and
    * finishes before the browser's stream closes.
    */
-  async function saveExchange(answerText: string) {
+  async function saveExchange(answerText: string, usage: NonNullable<ProjectChatMessage["metadata"]>["usage"]) {
     try {
       // A new chat is saved with its first answer, so a failed first try leaves no empty chat.
       if (!thread) {
@@ -145,7 +146,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
           .values({ id: threadId, projectId, userId, title: question.length > 60 ? `${question.slice(0, 57)}...` : question })
           .onConflictDoNothing();
       }
-      const answer: ProjectChatMessage = { id: assistantId, role: "assistant", metadata: { threadId }, parts: [{ type: "text", text: answerText }] };
+      const answer: ProjectChatMessage = { id: assistantId, role: "assistant", metadata: { threadId, usage }, parts: [{ type: "text", text: answerText }] };
       // Explicit times so the reply always sorts after its question (one statement
       // would give both the same now()), which "Try again" also relies on.
       const at = Date.now();
@@ -153,7 +154,17 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
         .insert(chatMessages)
         .values([
           { id: userMessage.id, threadId, role: "user", content: question, message: JSON.stringify(userMessage), createdAt: new Date(at) },
-          { id: assistantId, threadId, role: "assistant", content: answerText, message: JSON.stringify(answer), createdAt: new Date(at + 1) },
+          {
+            id: assistantId,
+            threadId,
+            role: "assistant",
+            content: answerText,
+            message: JSON.stringify(answer),
+            inputTokens: usage?.inputTokens,
+            outputTokens: usage?.outputTokens,
+            model: usage?.model,
+            createdAt: new Date(at + 1),
+          },
         ])
         .onConflictDoNothing();
       // Touch the chat and its project in one statement, for "most recent first" lists.
@@ -161,9 +172,6 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
         with t as (update chat_threads set updated_at = now() where id = ${threadId} returning project_id)
         update projects set updated_at = now() where id in (select project_id from t)
       `);
-      revalidateTag(messagesTag(threadId), { expire: 0 });
-      revalidateTag(threadsTag(projectId), { expire: 0 });
-      revalidateTag(projectsTag(userId), { expire: 0 });
       finishAnswer(answerText);
     } catch (error) {
       console.error("project.chat_save_failed", { message: error instanceof Error ? error.message : String(error) });
@@ -187,9 +195,9 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
       "Project memory (facts from all chats in this project, kept up to date):\n" +
       `<project_memory>\n${project.memory || "(empty: nothing saved yet)"}\n</project_memory>`,
     messages,
-    onEnd: async ({ text }) => {
+    onEnd: async ({ text, totalUsage }) => {
       // Nothing to save when the reply is empty: the user sees the error and can try again.
-      if (text.trim()) await saveExchange(text.trim());
+      if (text.trim()) await saveExchange(text.trim(), usageOf(totalUsage));
       else finishAnswer("");
     },
     onError: ({ error }) => {
@@ -208,6 +216,11 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
     const answerText = await Promise.race([answered, new Promise<string>((r) => (timer = setTimeout(() => r(""), 55_000)))]);
     clearTimeout(timer);
     if (!answerText) return;
+    // Refreshed here, not in onEnd: onEnd runs after the request's work is
+    // done, where revalidateTag is ignored and the new chat never listed.
+    revalidateTag(messagesTag(threadId), { expire: 0 });
+    revalidateTag(threadsTag(projectId), { expire: 0 });
+    revalidateTag(projectsTag(userId), { expire: 0 });
     try {
       if (await updateProjectMemory({ projectId, model: memoryModel, userText: question, assistantText: answerText })) {
         revalidateTag(memoryTag(projectId), { expire: 0 });
@@ -226,7 +239,8 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
       originalMessages: [userMessage],
       // Same id as the saved reply, so a reloaded chat matches what streamed.
       generateMessageId: () => assistantId,
-      messageMetadata: ({ part }) => (part.type === "start" ? { threadId } : undefined),
+      messageMetadata: ({ part }) =>
+        part.type === "start" ? { threadId } : part.type === "finish" ? { threadId, usage: usageOf(part.totalUsage) } : undefined,
       onError: () => "The AI provider could not answer. Check your key in Settings, then try again.",
     }),
   });

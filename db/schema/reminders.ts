@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { boolean, index, integer, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 import { reminderSourceEnum, reminderStatusEnum } from "./enums";
 
@@ -29,6 +29,12 @@ export const reminders = pgTable(
     notifiedAt: timestamp("notified_at", { withTimezone: true }),
     /** True when at least one device received the push. */
     pushSent: boolean("push_sent").notNull().default(false),
+    /**
+     * A calendar invite's UID when the reminder came from one. Unique per user,
+     * so the same meeting (an update, or the same invite in two Gmails) never
+     * makes a second reminder.
+     */
+    eventUid: text("event_uid"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
@@ -42,6 +48,7 @@ export const reminders = pgTable(
     index("reminders_due_idx")
       .on(t.notifyAt)
       .where(sql`${t.status} = 'pending' and ${t.notifiedAt} is null`),
+    uniqueIndex("reminders_user_event_uidx").on(t.userId, t.eventUid).where(sql`${t.eventUid} is not null`),
   ],
 );
 

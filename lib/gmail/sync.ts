@@ -8,6 +8,7 @@ import { getGmailAccessToken } from "./connection";
 import { refreshInbox } from "./refresh";
 import { AI_BATCH, detectWithAi, type AiFinding, type EmailForAi } from "./detect-ai";
 import { parseInvite } from "./ics";
+import { remindMeetings, type MeetingInvite } from "./meeting-reminders";
 import { bodyText, decodeBase64Url, findCalendarPart, findMeetingLink, header, parseFrom } from "./parse";
 
 /**
@@ -38,30 +39,31 @@ export type SyncResult =
 type Row = typeof emailItems.$inferInsert;
 
 /**
- * Reads new Gmail, finds meetings and deadlines, and saves them as
- * suggestions. Safe to call from the cron and from "Sync now" at the same
- * time: a lock in gmail_sync lets only one run per user.
+ * Reads new mail in one connected Gmail, finds meetings and deadlines, and
+ * saves them as suggestions. Safe to call from the cron and from "Sync now"
+ * at the same time: a lock in gmail_sync lets only one run per Gmail.
  */
-export async function syncGmail(userId: string): Promise<SyncResult> {
+export async function syncGmail(accountId: string): Promise<SyncResult> {
   const startedAt = new Date();
   const [claimed] = await db
     .update(gmailSync)
     .set({ syncStartedAt: startedAt })
     .where(
       and(
-        eq(gmailSync.userId, userId),
+        eq(gmailSync.accountId, accountId),
         eq(gmailSync.status, "active"),
         sql`(${gmailSync.syncStartedAt} is null or ${gmailSync.syncStartedAt} < now() - ${STALE_LOCK}::interval)`,
       ),
     )
-    .returning({ accountId: gmailSync.accountId, email: gmailSync.email, lastSyncedAt: gmailSync.lastSyncedAt });
+    .returning({ userId: gmailSync.userId, email: gmailSync.email, lastSyncedAt: gmailSync.lastSyncedAt });
   if (!claimed) {
-    const [row] = await db.select({ status: gmailSync.status }).from(gmailSync).where(eq(gmailSync.userId, userId)).limit(1);
+    const [row] = await db.select({ status: gmailSync.status }).from(gmailSync).where(eq(gmailSync.accountId, accountId)).limit(1);
     return { ok: false, reason: !row ? "not_connected" : row.status === "active" ? "busy" : "reconnect" };
   }
 
+  const userId = claimed.userId;
   try {
-    const [token, context] = await Promise.all([getGmailAccessToken(userId, claimed.accountId), getDraftContext(userId)]);
+    const [token, context] = await Promise.all([getGmailAccessToken(userId, accountId), getDraftContext(userId, "gmail")]);
     const timezone = context.timezone ?? "UTC";
     const email = claimed.email ?? (await getProfile(token)).emailAddress;
 
@@ -94,15 +96,27 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
 
     // 3. Calendar invites are read directly (free). The rest go to the AI, if the user has a key.
     const rows: Row[] = [];
+    const invites: MeetingInvite[] = [];
     const forAi: { message: GmailMessage; email: EmailForAi }[] = [];
     for (const message of messages) {
-      const base = baseRow(userId, message);
+      const base = baseRow(userId, accountId, message);
       const calendar = findCalendarPart(message);
       const ics = calendar
         ? decodeBase64Url(calendar.data ?? (await getAttachment(token, message.id, calendar.attachmentId!)))
         : "";
       const invite = ics ? parseInvite(ics, timezone) : null;
       if (invite) {
+        const link = findMeetingLink(`${invite.location ?? ""} ${invite.description}`) ?? findMeetingLink(bodyText(message, 20_000));
+        if (invite.uid) {
+          invites.push({
+            gmailMessageId: message.id,
+            uid: invite.uid,
+            title: invite.title,
+            startsAt: invite.startsAt,
+            notes: [...new Set([link, invite.location].filter(Boolean))].join("\n").slice(0, 2000) || null,
+            action: invite.action,
+          });
+        }
         rows.push({
           ...base,
           // Only a real invite with a title is suggested; replies ("Accepted: ...") and cancellations are not.
@@ -112,7 +126,7 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
           title: invite.title.slice(0, 200) || base.subject,
           startsAt: invite.startsAt,
           location: invite.location?.slice(0, 300) ?? null,
-          link: findMeetingLink(`${invite.location ?? ""} ${invite.description}`) ?? findMeetingLink(bodyText(message, 20_000)),
+          link,
           eventUid: invite.uid,
         });
       } else if (context.cheapModel) {
@@ -143,7 +157,7 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
         if (!findings) continue;
         const byId = new Map<string, AiFinding>(findings.map((f) => [f.id, f]));
         for (const { message } of group) {
-          const base = baseRow(userId, message);
+          const base = baseRow(userId, accountId, message);
           const found = byId.get(message.id);
           rows.push(
             found
@@ -157,16 +171,20 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
     // 5. Save everything in one statement; the unique index skips anything saved meanwhile.
     if (rows.length) await db.insert(emailItems).values(rows).onConflictDoNothing();
 
-    // An updated or cancelled invite replaces the earlier suggestion for the same meeting.
+    // An updated or cancelled invite replaces the earlier suggestion for the same meeting
+    // (also an "Added" one: the meeting keeps one reminder, moved below, and one Inbox row).
     const uids = [...new Set(rows.map((r) => r.eventUid).filter((u): u is string => Boolean(u)))];
     if (uids.length) {
       await db.execute(sql`
         update email_items e set status = 'ignored', updated_at = now()
-         where e.user_id = ${userId} and e.status = 'new' and e.event_uid in ${uids}
+         where e.user_id = ${userId} and e.status in ('new', 'added') and e.event_uid in ${uids}
            and exists (select 1 from email_items n
                         where n.user_id = e.user_id and n.event_uid = e.event_uid and n.received_at > e.received_at)
       `);
     }
+
+    // Calendar invites become reminders by themselves (once per meeting).
+    if (invites.length) await remindMeetings(userId, invites, timezone, context.defaultLeadMinutes);
 
     // 6. Move the sync position: to now, or (more to read) to the newest email read, or (AI failed) nowhere.
     const newest = messages.at(-1);
@@ -178,7 +196,7 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
     await db
       .update(gmailSync)
       .set({ email, lastSyncedAt: nextPosition, syncStartedAt: null, problem: aiFailed ? AI_FAILED : null })
-      .where(eq(gmailSync.userId, userId));
+      .where(eq(gmailSync.accountId, accountId));
     refreshInbox(userId);
     return { ok: true, checked: messages.length, suggested: rows.filter((r) => r.status === "new").length };
   } catch (error) {
@@ -190,14 +208,14 @@ export async function syncGmail(userId: string): Promise<SyncResult> {
           problem: "Gmail access ended. This happens every 7 days while the app is in Google's testing mode, or if access was removed. Reconnect to continue.",
           syncStartedAt: null,
         })
-        .where(eq(gmailSync.userId, userId));
+        .where(eq(gmailSync.accountId, accountId));
       refreshInbox(userId);
       return { ok: false, reason: "reconnect" };
     }
     // Anything else (Gmail or the AI briefly failing): release the lock and try again next run.
     // lastSyncedAt is not moved, so no email is skipped.
     console.error("gmail.sync_failed", { userId, message: error instanceof Error ? error.message : String(error) });
-    await db.update(gmailSync).set({ syncStartedAt: null }).where(eq(gmailSync.userId, userId));
+    await db.update(gmailSync).set({ syncStartedAt: null }).where(eq(gmailSync.accountId, accountId));
     return { ok: false, reason: "error" };
   }
 }
@@ -207,10 +225,11 @@ function statusFor(startsAt: Date | null): "new" | "ignored" {
   return startsAt && startsAt.getTime() < Date.now() ? "ignored" : "new";
 }
 
-function baseRow(userId: string, message: GmailMessage) {
+function baseRow(userId: string, accountId: string, message: GmailMessage) {
   const from = parseFrom(header(message, "From"));
   return {
     userId,
+    accountId,
     gmailMessageId: message.id,
     threadId: message.threadId,
     fromName: from.name.slice(0, 200),

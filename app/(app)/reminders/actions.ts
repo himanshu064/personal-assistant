@@ -9,6 +9,7 @@ import { db } from "@/db";
 import { aiKeys, emailItems, reminders } from "@/db/schema";
 import { MODEL_CATALOG } from "@/lib/ai/models";
 import { getDraftContext } from "@/lib/ai/user-model";
+import { withUsage } from "@/lib/ai/usage";
 import { decrypt } from "@/lib/crypto";
 import { inboxTag } from "@/lib/data/inbox-tags";
 import { remindersTag } from "@/lib/data/reminders";
@@ -35,7 +36,7 @@ export async function draftReminder(input: unknown): Promise<{ ok: true; draft: 
   const parsed = reminderTextSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Try again." };
 
-  const context = await getDraftContext(user.id);
+  const context = await getDraftContext(user.id, "reminder");
   // The saved timezone wins; the browser's is the fallback for brand new users.
   const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");
 
@@ -65,8 +66,9 @@ function toInstants(values: z.output<typeof timedSchema>): { remindAt: Date; not
 }
 
 /**
- * One INSERT. From an Inbox suggestion (source "gmail"), one more UPDATE marks
- * the suggestion as added and links it to the new reminder.
+ * One INSERT. From an Inbox suggestion (source "gmail"), the suggestion is
+ * read first (for its invite UID) and then marked as added and linked to the
+ * reminder. If that meeting already has a reminder, it is linked instead.
  */
 export async function createReminder(input: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
@@ -82,7 +84,17 @@ export async function createReminder(input: unknown): Promise<{ ok: true } | Fai
     return { ok: false, error: "That time has already passed. Pick a time in the future.", field: "remindAt" };
   }
 
-  const [created] = await db
+  // A suggestion from a calendar invite carries its UID, so the same meeting never gets a second reminder.
+  const [item] = parsed.data.emailItemId
+    ? await db
+        .select({ eventUid: emailItems.eventUid })
+        .from(emailItems)
+        .where(and(eq(emailItems.id, parsed.data.emailItemId), eq(emailItems.userId, user.id)))
+        .limit(1)
+    : [];
+  const eventUid = item?.eventUid ?? null;
+
+  const [inserted] = await db
     .insert(reminders)
     .values({
       userId: user.id,
@@ -91,9 +103,21 @@ export async function createReminder(input: unknown): Promise<{ ok: true } | Fai
       leadMinutes: parsed.data.leadMinutes,
       timezone: parsed.data.timezone,
       source: parsed.data.source,
+      eventUid,
       ...times,
     })
+    .onConflictDoNothing()
     .returning({ id: reminders.id });
+  const created =
+    inserted ??
+    (
+      await db
+        .select({ id: reminders.id })
+        .from(reminders)
+        .where(and(eq(reminders.userId, user.id), eq(reminders.eventUid, eventUid!)))
+        .limit(1)
+    )[0];
+  if (!created) return { ok: false, error: "Something went wrong. Try again." };
   updateTag(remindersTag(user.id));
 
   if (parsed.data.emailItemId) {
@@ -238,16 +262,23 @@ export async function transcribeAudio(formData: FormData): Promise<{ ok: true; t
   if (audio.size > MAX_AUDIO_BYTES) return { ok: false, error: "That recording is too long. Keep it under a minute." };
 
   const [key] = await db
-    .select({ encryptedKey: aiKeys.encryptedKey })
+    .select({ id: aiKeys.id, encryptedKey: aiKeys.encryptedKey })
     .from(aiKeys)
-    .where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, "google")))
+    .where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, "google"), eq(aiKeys.isActive, true)))
     .limit(1);
   if (!key) return { ok: false, error: "Voice needs Chrome or Safari, or a Gemini key in Settings. You can type instead." };
 
-  const google = createGoogle({ apiKey: decrypt(key.encryptedKey) });
+  const modelId = MODEL_CATALOG.providers.google.defaultModel;
+  const model = withUsage(createGoogle({ apiKey: decrypt(key.encryptedKey) })(modelId), {
+    userId: user.id,
+    keyId: key.id,
+    provider: "google",
+    model: modelId,
+    feature: "transcribe",
+  });
   try {
     const { text } = await generateText({
-      model: google(MODEL_CATALOG.providers.google.defaultModel),
+      model,
       maxRetries: 1,
       messages: [
         {

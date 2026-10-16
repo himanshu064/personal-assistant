@@ -1,9 +1,10 @@
 import "server-only";
 import { cacheLife, cacheTag } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { aiKeys, userSettings } from "@/db/schema";
+import { aiKeys, aiUsage, userSettings } from "@/db/schema";
 import { resolveModelChoice } from "@/lib/ai/models";
+import { DEFAULT_LEAD_MINUTES } from "@/lib/validation/reminders";
 import { requireUser } from "@/lib/session";
 
 export const settingsTag = (userId: string) => `user:${userId}:settings`;
@@ -36,9 +37,17 @@ async function getSettingsForUser(userId: string) {
       .where(eq(userSettings.userId, userId))
       .limit(1),
     db
-      .select({ provider: aiKeys.provider, last4: aiKeys.last4, updatedAt: aiKeys.updatedAt })
+      .select({
+        id: aiKeys.id,
+        provider: aiKeys.provider,
+        label: aiKeys.label,
+        last4: aiKeys.last4,
+        isActive: aiKeys.isActive,
+        updatedAt: aiKeys.updatedAt,
+      })
       .from(aiKeys)
-      .where(eq(aiKeys.userId, userId)),
+      .where(eq(aiKeys.userId, userId))
+      .orderBy(aiKeys.createdAt),
   ]);
 
   const choice = resolveModelChoice({ provider: settings?.provider ?? null, model: settings?.model ?? null });
@@ -46,9 +55,42 @@ async function getSettingsForUser(userId: string) {
     timezone: settings?.timezone ?? null,
     provider: choice.provider,
     model: choice.model,
-    defaultLeadMinutes: settings?.defaultLeadMinutes ?? 0,
-    keys: Object.fromEntries(keys.map((k) => [k.provider, { last4: k.last4, updatedAt: k.updatedAt }])) as Partial<
+    defaultLeadMinutes: settings?.defaultLeadMinutes ?? DEFAULT_LEAD_MINUTES,
+    /** The key in use per provider. */
+    keys: Object.fromEntries(keys.filter((k) => k.isActive).map((k) => [k.provider, { last4: k.last4, updatedAt: k.updatedAt }])) as Partial<
       Record<(typeof keys)[number]["provider"], { last4: string; updatedAt: Date }>
     >,
+    /** Every saved key, oldest first. */
+    keyList: keys,
   };
+}
+
+export type KeyUsageRow = {
+  keyId: string | null;
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+};
+
+/**
+ * Tokens used in the last 30 days, per key and model, most used first. Not
+ * cached: it changes with every AI call, and the page reads it on demand.
+ */
+export async function getMyKeyUsage(): Promise<KeyUsageRow[]> {
+  const user = await requireUser();
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+  const total = sql<number>`sum(${aiUsage.inputTokens} + ${aiUsage.outputTokens})`;
+  return db
+    .select({
+      keyId: aiUsage.keyId,
+      model: aiUsage.model,
+      calls: sql<number>`count(*)`.mapWith(Number),
+      inputTokens: sql<number>`sum(${aiUsage.inputTokens})`.mapWith(Number),
+      outputTokens: sql<number>`sum(${aiUsage.outputTokens})`.mapWith(Number),
+    })
+    .from(aiUsage)
+    .where(and(eq(aiUsage.userId, user.id), gt(aiUsage.createdAt, since)))
+    .groupBy(aiUsage.keyId, aiUsage.model)
+    .orderBy(desc(total));
 }

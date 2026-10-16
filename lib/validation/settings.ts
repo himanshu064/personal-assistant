@@ -16,6 +16,7 @@ export type PreferencesValues = z.output<typeof preferencesSchema>;
 
 export const apiKeySchema = z.object({
   provider: z.enum(AI_PROVIDERS),
+  label: z.string().trim().max(40, "Keep the name under 40 characters."),
   apiKey: z
     .string()
     .trim()
@@ -25,7 +26,7 @@ export const apiKeySchema = z.object({
 });
 export type ApiKeyValues = z.infer<typeof apiKeySchema>;
 
-export const providerSchema = z.object({ provider: z.enum(AI_PROVIDERS) });
+export const keyIdSchema = z.object({ id: z.uuid() });
 
 /** True when the runtime knows this IANA timezone name. */
 export function isValidTimezone(tz: string) {

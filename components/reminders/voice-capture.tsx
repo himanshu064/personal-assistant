@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeyboardIcon, MicIcon, SquareIcon } from "lucide-react";
 import { cn } from "cn";
 import { Button } from "@/components/ui/button";
@@ -21,12 +21,20 @@ export function VoiceCapture({
   onText,
   busy = false,
   prompt = "Tap and say what to remember",
+  autoStart = false,
+  typingOnly = false,
+  placeholder = "For example: Call Ravi tomorrow at 5pm",
 }: {
   onText: (text: string, source: "voice" | "text") => void;
   busy?: boolean;
   prompt?: string;
+  /** Start listening as soon as it shows (the tap that opened it allows the microphone). */
+  autoStart?: boolean;
+  /** Only the text box, no mic. */
+  typingOnly?: boolean;
+  placeholder?: string;
 }) {
-  const [typing, setTyping] = useState(false);
+  const [typing, setTyping] = useState(typingOnly);
   const [typed, setTyped] = useState("");
   const [transcribing, setTranscribing] = useState(false);
   const [fallbackError, setFallbackError] = useState<string | null>(null);
@@ -56,6 +64,19 @@ export function VoiceCapture({
     return useSpeech ? speech.start() : recorder.start();
   }
 
+  // Once, a tick after mounting: React's development double mount cancels the
+  // first timer, so listening is never started and then stopped by the cleanup.
+  const started = useRef(false);
+  useEffect(() => {
+    if (!autoStart || started.current || typingOnly || !canVoice) return;
+    const timer = setTimeout(() => {
+      started.current = true;
+      if (useSpeech) speech.start();
+      else recorder.start();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [autoStart, typingOnly, canVoice, useSpeech, speech, recorder]);
+
   function submitTyped(event: React.FormEvent) {
     event.preventDefault();
     const text = typed.trim();
@@ -70,10 +91,10 @@ export function VoiceCapture({
         <Textarea
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder="For example: Call Ravi tomorrow at 5pm"
+          placeholder={placeholder}
           aria-label="What should I remind you about?"
           className="min-h-24 text-base md:text-sm"
-          autoFocus={typing}
+          autoFocus={typing && !typingOnly}
           onKeyDown={(e) => {
             // Not while an input method (Hindi, Japanese...) is still composing a word.
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submitTyped(e);
@@ -84,7 +105,7 @@ export function VoiceCapture({
             {working ? <Spinner /> : null}
             Continue
           </Button>
-          {canVoice ? (
+          {canVoice && !typingOnly ? (
             <Button type="button" variant="outline" size="page" onClick={() => setTyping(false)}>
               <MicIcon />
               Speak

@@ -100,7 +100,7 @@ export function PreferencesForm({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="defaultLeadMinutes">Default alert</FieldLabel>
+              <FieldLabel htmlFor="defaultLeadMinutes">Alert me</FieldLabel>
               <NativeSelect id="defaultLeadMinutes" className={selectClass} {...register("defaultLeadMinutes")}>
                 {LEAD_TIME_OPTIONS.map((m) => (
                   <NativeSelectOption key={m} value={m}>
@@ -108,7 +108,9 @@ export function PreferencesForm({
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
-              <FieldDescription>Used for new reminders unless you say otherwise.</FieldDescription>
+              <FieldDescription>
+                For every new reminder, unless you say otherwise. Meeting invites in your Gmail become reminders by themselves, with this alert.
+              </FieldDescription>
             </Field>
 
             <Field>

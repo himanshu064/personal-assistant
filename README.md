@@ -45,8 +45,10 @@ Create these jobs on cron-job.org (or Vercel Cron):
 
 | Job | Request | Every |
 |---|---|---|
-| Send due reminders | `POST https://<your domain>/api/cron/reminders` with header `x-cron-secret: <CRON_SECRET>` | 5 minutes |
-| Read new Gmail | `POST https://<your domain>/api/cron/gmail-sync` with the same header | 30 minutes |
+| Send due reminders | `POST https://<your domain>/api/cron/reminders` with header `x-cron-secret: <CRON_SECRET>` | 15 minutes, at :00, :15, :30, :45 (`REMINDER_CRON_INTERVAL_MINUTES=15`) |
+| Read new Gmail | `POST https://<your domain>/api/cron/gmail-sync` with the same header | 15 minutes, at the same times (`GMAIL_SYNC_INTERVAL_MINUTES=15`) |
+
+Both jobs run at the same minutes on purpose: Neon puts the database to sleep after 5 quiet minutes, and one shared wake up every 15 minutes keeps it inside the free plan's 100 compute hours (about 60 a month). Reminders can arrive up to 15 minutes early, never late.
 
 ## Gmail
 

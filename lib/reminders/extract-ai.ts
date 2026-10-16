@@ -4,7 +4,8 @@ import { z } from "zod";
 import { toLocalInputValue } from "@/lib/time";
 import { LEAD_TIME_OPTIONS, type ReminderDraft } from "@/lib/validation/reminders";
 
-const draftSchema = z.object({
+/** A reminder as the model returns it. Shared with the assistant, which fills the same shape. */
+export const draftSchema = z.object({
   title: z.string().describe("Short imperative title, for example 'Call Ravi'. No date or time words."),
   localDateTime: z
     .string()
@@ -43,8 +44,12 @@ export async function extractReminderWithAi(
     prompt: `Current local time: ${weekday}, ${localNow} (${timeZone}).\nNote: """${text}"""`,
   });
 
+  return draftFromOutput(output);
+}
+
+/** Checks what the model returned: an unknown alert time becomes 0, a malformed time becomes "" (the user picks one). */
+export function draftFromOutput(output: z.infer<typeof draftSchema>): ReminderDraft {
   const lead = (LEAD_TIME_OPTIONS as readonly number[]).includes(output.leadMinutes) ? output.leadMinutes : 0;
   const remindAt = output.localDateTime && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(output.localDateTime) ? output.localDateTime : "";
-
   return { title: output.title.trim(), remindAt, notes: output.notes.trim(), leadMinutes: lead, via: "ai" };
 }

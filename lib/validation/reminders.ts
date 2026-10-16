@@ -1,12 +1,15 @@
 import { z } from "zod";
 
-export const LEAD_TIME_OPTIONS = [0, 5, 10, 15, 30, 60] as const;
+export const LEAD_TIME_OPTIONS = [0, 5, 10, 15, 20, 30, 60] as const;
+/** For users who never chose: 20 minutes before (the client's choice). Same as the column default. */
+export const DEFAULT_LEAD_MINUTES = 20;
 
 export const LEAD_TIME_LABELS: Record<number, string> = {
   0: "At the time",
   5: "5 minutes before",
   10: "10 minutes before",
   15: "15 minutes before",
+  20: "20 minutes before",
   30: "30 minutes before",
   60: "1 hour before",
 };

@@ -5,19 +5,20 @@ import { emailItemFoundByEnum, emailItemKindEnum, emailItemStatusEnum, gmailSync
 import { reminders } from "./reminders";
 
 /**
- * One row per connected Gmail. The tokens themselves stay in Better Auth's
- * `account` table (encrypted); this row tracks syncing.
+ * One row per connected Gmail; a user can connect several. The tokens
+ * themselves stay in Better Auth's `account` table (encrypted); this row
+ * tracks syncing.
  */
 export const gmailSync = pgTable(
   "gmail_sync",
   {
-    userId: uuid("user_id")
-      .primaryKey()
-      .references(() => user.id, { onDelete: "cascade" }),
-    /** Better Auth's account row for Google (used to get a fresh access token). */
+    /** Better Auth's account row for this Google account (used to get a fresh access token). */
     accountId: uuid("account_id")
-      .notNull()
+      .primaryKey()
       .references(() => account.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
     /** The Gmail address, read from Gmail on the first sync. */
     email: text("email"),
     status: gmailSyncStatusEnum("status").notNull().default("active"),
@@ -34,7 +35,10 @@ export const gmailSync = pgTable(
       .$onUpdate(() => new Date()),
   },
   // The cron: active connections, least recently synced first.
-  (t) => [index("gmail_sync_due_idx").on(t.lastSyncedAt).where(sql`${t.status} = 'active'`)],
+  (t) => [
+    index("gmail_sync_due_idx").on(t.lastSyncedAt).where(sql`${t.status} = 'active'`),
+    index("gmail_sync_user_idx").on(t.userId),
+  ],
 );
 
 /**
@@ -48,6 +52,10 @@ export const emailItems = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    /** The Gmail it was found in. Disconnecting that Gmail deletes its rows. */
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => account.id, { onDelete: "cascade" }),
     gmailMessageId: text("gmail_message_id").notNull(),
     threadId: text("thread_id").notNull(),
     fromName: text("from_name").notNull(),
@@ -84,6 +92,7 @@ export const emailItems = pgTable(
     index("email_items_user_event_idx").on(t.userId, t.eventUid).where(sql`${t.eventUid} is not null`),
     // Deleting a reminder clears this link; the index keeps that lookup fast.
     index("email_items_reminder_idx").on(t.reminderId).where(sql`${t.reminderId} is not null`),
+    index("email_items_account_idx").on(t.accountId),
   ],
 );
 

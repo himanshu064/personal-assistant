@@ -12,6 +12,7 @@ export type InboxStatus = "new" | "added" | "dismissed";
 export const INBOX_STATUSES: InboxStatus[] = ["new", "added", "dismissed"];
 
 export type GmailConnection = {
+  accountId: string;
   email: string | null;
   status: "active" | "needs_reconnect";
   problem: string | null;
@@ -36,23 +37,26 @@ export type InboxItem = {
   location: string | null;
   link: string | null;
   reminderId: string | null;
+  /** The Gmail it was found in (null until that Gmail's first sync finishes). */
+  accountEmail: string | null;
 };
 
 export type InboxCounts = Record<InboxStatus, number> & Record<InboxItem["kind"], number>;
 
-/** The user's Gmail connection, or null when Gmail is not connected. */
-export async function getMyGmail(): Promise<GmailConnection | null> {
+/** The user's connected Gmails, first connected first (empty when none). */
+export async function getMyGmails(): Promise<GmailConnection[]> {
   const user = await requireUser();
-  return readConnection(user.id);
+  return readConnections(user.id);
 }
 
-async function readConnection(userId: string): Promise<GmailConnection | null> {
+async function readConnections(userId: string): Promise<GmailConnection[]> {
   "use cache";
   cacheTag(inboxTag(userId));
   cacheLife("minutes");
 
-  const [row] = await db
+  return db
     .select({
+      accountId: gmailSync.accountId,
       email: gmailSync.email,
       status: gmailSync.status,
       problem: gmailSync.problem,
@@ -61,8 +65,7 @@ async function readConnection(userId: string): Promise<GmailConnection | null> {
     })
     .from(gmailSync)
     .where(eq(gmailSync.userId, userId))
-    .limit(1);
-  return row ?? null;
+    .orderBy(gmailSync.createdAt);
 }
 
 /**
@@ -97,8 +100,10 @@ async function readInbox(userId: string, status: InboxStatus) {
         location: emailItems.location,
         link: emailItems.link,
         reminderId: emailItems.reminderId,
+        accountEmail: gmailSync.email,
       })
       .from(emailItems)
+      .leftJoin(gmailSync, eq(gmailSync.accountId, emailItems.accountId))
       .where(and(eq(emailItems.userId, userId), eq(emailItems.status, status)))
       .orderBy(desc(emailItems.receivedAt))
       .limit(200),

@@ -67,6 +67,10 @@ export const chatMessages = pgTable(
     content: text("content").notNull(),
     /** The UI message parts and metadata, as the AI SDK produced them. */
     message: text("message").notNull(),
+    /** Tokens and model of an answer (null on the user's messages). */
+    inputTokens: integer("input_tokens"),
+    outputTokens: integer("output_tokens"),
+    model: text("model"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("chat_messages_thread_created_idx").on(t.threadId, t.createdAt)],

@@ -8,13 +8,16 @@ import { safeAction } from "@/lib/safe-action";
 import { ReminderForm } from "./reminder-form";
 import { VoiceCapture } from "./voice-capture";
 
-type Preview = { draft: ReminderDraft; heard: string; source: "voice" | "text"; timezone: string };
+export type Preview = { draft: ReminderDraft; heard: string; source: "voice" | "text"; timezone: string };
 
-function browserTimezone() {
+export function browserTimezone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-/** Speak (or type), check the preview, then save. Unframed, so Home and the New dialog can place it. */
+/**
+ * Type a reminder, check the preview, then save. Speaking goes through the
+ * assistant button; this is the typed way in. Unframed, so the New dialog can place it.
+ */
 export function NewReminder({ onSaved }: { onSaved?: () => void }) {
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,35 +35,10 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
   return (
     <div className="flex flex-col gap-4">
       {preview ? (
-        <>
-          <p className="text-[15px] text-muted-foreground">Check the details, fix anything that is off, then save.</p>
-          <ReminderForm
-            key={preview.heard}
-            defaultValues={{
-              title: preview.draft.title,
-              remindAt: preview.draft.remindAt,
-              notes: preview.draft.notes,
-              leadMinutes: preview.draft.leadMinutes,
-            }}
-            timezone={preview.timezone}
-            heard={preview.heard}
-            via={preview.draft.via}
-            submitLabel="Save reminder"
-            onCancel={() => setPreview(null)}
-            onSubmit={async (values) => {
-              const result = await safeAction(() => createReminder({ ...values, timezone: preview.timezone, source: preview.source }));
-              if (result.ok) {
-                toast.add({ title: "Reminder saved", type: "success" });
-                setPreview(null);
-                onSaved?.();
-              }
-              return result;
-            }}
-          />
-        </>
+        <ReminderPreview preview={preview} onCancel={() => setPreview(null)} onSaved={() => (setPreview(null), onSaved?.())} />
       ) : (
         <>
-          <VoiceCapture onText={handleText} busy={drafting} />
+          <VoiceCapture onText={handleText} busy={drafting} typingOnly />
           {error ? (
             <p role="alert" className="text-center text-sm text-destructive">
               {error}
@@ -69,5 +47,36 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
         </>
       )}
     </div>
+  );
+}
+
+/** The draft as an editable form; nothing is saved until Save is tapped. */
+export function ReminderPreview({ preview, onCancel, onSaved }: { preview: Preview; onCancel: () => void; onSaved: () => void }) {
+  return (
+    <>
+      <p className="text-[15px] text-muted-foreground">Check the details, fix anything that is off, then save.</p>
+      <ReminderForm
+        key={preview.heard}
+        defaultValues={{
+          title: preview.draft.title,
+          remindAt: preview.draft.remindAt,
+          notes: preview.draft.notes,
+          leadMinutes: preview.draft.leadMinutes,
+        }}
+        timezone={preview.timezone}
+        heard={preview.heard}
+        via={preview.draft.via}
+        submitLabel="Save reminder"
+        onCancel={onCancel}
+        onSubmit={async (values) => {
+          const result = await safeAction(() => createReminder({ ...values, timezone: preview.timezone, source: preview.source }));
+          if (result.ok) {
+            toast.add({ title: "Reminder saved", type: "success" });
+            onSaved();
+          }
+          return result;
+        }}
+      />
+    </>
   );
 }

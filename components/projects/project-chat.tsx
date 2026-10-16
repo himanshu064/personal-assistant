@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { ArrowUpIcon, KeyRoundIcon, MessageSquarePlusIcon, MessagesSquareIcon, MicIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react";
+import { ArrowUpIcon, KeyRoundIcon, MessageSquarePlusIcon, MessagesSquareIcon, RotateCwIcon, SquareIcon, Trash2Icon } from "lucide-react";
 import { cn } from "cn";
 import { ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
 import { deleteThread } from "@/app/(app)/projects/actions";
-import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { HANDOFF_EVENT, takeHandOff } from "@/lib/assistant/handoff";
 import type { ThreadRow } from "@/lib/data/projects";
 import { MAX_MESSAGE_CHARS, type ProjectChatMessage } from "@/lib/projects/chat-types";
 import { safeAction } from "@/lib/safe-action";
@@ -108,16 +108,35 @@ export function ProjectChat({
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: status === "streaming" ? "auto" : "smooth" });
   }, [messages, status]);
 
-  const speech = useSpeechRecognition({ onFinal: (text) => setInput((v) => (v ? `${v} ${text}` : text)) });
-
   function send(text: string) {
     const question = text.trim();
-    if (!question || busy) return;
+    if (!question) return;
+    // Mid answer: keep it in the box to send next, instead of losing it.
+    if (busy) return void setInput(question);
     if (question.length > MAX_MESSAGE_CHARS) return void toast.add({ title: "That message is too long.", type: "error" });
     clearError();
     void sendMessage({ text: question }, { body: { threadId: threadRef.current } });
     setInput("");
   }
+
+  // What the assistant button heard for this project: sent here as if typed.
+  const sendRef = useRef(send);
+  useEffect(() => {
+    sendRef.current = send;
+  });
+  useEffect(() => {
+    const deliver = () => {
+      const message = takeHandOff(projectId);
+      if (message) sendRef.current(message);
+    };
+    // A tick later, so React's development double mount cannot take the message and drop it.
+    const timer = setTimeout(deliver, 0);
+    window.addEventListener(HANDOFF_EVENT, deliver);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener(HANDOFF_EVENT, deliver);
+    };
+  }, [projectId]);
 
   function newChat() {
     if (busy) void stop();
@@ -266,7 +285,7 @@ export function ProjectChat({
           >
             <div className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border bg-background p-2 focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30">
               <Textarea
-                value={speech.listening && speech.transcript ? `${input} ${speech.transcript}`.trim() : input}
+                value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -274,22 +293,11 @@ export function ProjectChat({
                     send(input);
                   }
                 }}
-                placeholder="Say or type something about this project"
+                placeholder="Type something about this project"
                 aria-label="Message"
                 rows={1}
                 className="max-h-40 min-h-10 flex-1 resize-none border-0 bg-transparent px-2 py-2 shadow-none focus-visible:ring-0"
               />
-              {speech.supported ? (
-                <Button
-                  type="button"
-                  variant={speech.listening ? "destructive" : "ghost"}
-                  size="icon-lg"
-                  aria-label={speech.listening ? "Stop dictation" : "Dictate"}
-                  onClick={() => (speech.listening ? speech.stop() : speech.start())}
-                >
-                  {speech.listening ? <SquareIcon className="fill-current" /> : <MicIcon strokeWidth={1.5} />}
-                </Button>
-              ) : null}
               {busy ? (
                 <Button type="button" size="icon-lg" variant="outline" aria-label="Stop answering" onClick={() => void stop()}>
                   <SquareIcon className="fill-current" />
@@ -300,7 +308,6 @@ export function ProjectChat({
                 </Button>
               )}
             </div>
-            {speech.error ? <p className="mx-auto mt-2 max-w-3xl text-xs text-destructive">{speech.error}</p> : null}
           </form>
         ) : (
           // Without a key, saved chats stay readable; only sending needs one.

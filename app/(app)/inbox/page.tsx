@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Page } from "@/components/app-shell/page";
-import { ConnectGmail } from "@/components/inbox/connect-gmail";
+import { ConnectGmail, linkErrorMessage } from "@/components/inbox/connect-gmail";
 import { InboxActions } from "@/components/inbox/inbox-actions";
 import { InboxView } from "@/components/inbox/inbox-view";
 import { ReconnectBanner } from "@/components/inbox/reconnect-banner";
 import { SyncWatcher } from "@/components/inbox/sync-watcher";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
-import { getMyGmail, getMyInbox, type InboxStatus } from "@/lib/data/inbox";
+import { getMyGmails, getMyInbox, type GmailConnection, type InboxStatus } from "@/lib/data/inbox";
 import { getMySettings } from "@/lib/data/settings";
 import { formatRelative } from "@/lib/time";
 
@@ -36,63 +36,89 @@ export default function InboxPage(props: PageProps<"/inbox">) {
   );
 }
 
+function listEmails(gmails: GmailConnection[]) {
+  const emails = gmails.map((g) => g.email ?? "a new Gmail");
+  return emails.length <= 1 ? (emails[0] ?? "your Gmail") : `${emails.slice(0, -1).join(", ")} and ${emails.at(-1)}`;
+}
+
 async function StatusLine() {
-  const gmail = await getMyGmail();
-  if (!gmail) return <>Meetings and deadlines found in your Gmail.</>;
-  const checked = gmail.syncing
-    ? "Checking now..."
-    : gmail.lastSyncedAt
-      ? `Checked ${formatRelative(new Date(gmail.lastSyncedAt))}.`
-      : "First check starting...";
+  const gmails = await getMyGmails();
+  if (gmails.length === 0) return <>Meetings and deadlines found in your Gmail.</>;
+  // The least recently checked Gmail, so the line never claims more than is true.
+  const synced = gmails.map((g) => g.lastSyncedAt).filter((d): d is Date => d !== null);
+  const oldest = synced.length === gmails.length ? new Date(Math.min(...synced.map((d) => new Date(d).getTime()))) : null;
+  const checked = gmails.some((g) => g.syncing) ? "Checking now..." : oldest ? `Checked ${formatRelative(oldest)}.` : "First check starting...";
   return (
     <>
-      Suggestions from {gmail.email ?? "your Gmail"}. {checked}
+      Suggestions from {listEmails(gmails)}. {checked}
     </>
   );
 }
 
 async function HeaderActions() {
-  const gmail = await getMyGmail();
-  return gmail ? <InboxActions canSync={gmail.status === "active"} /> : null;
+  const gmails = await getMyGmails();
+  return gmails.length > 0 ? (
+    <InboxActions canSync={gmails.some((g) => g.status === "active")} accounts={gmails.map((g) => ({ accountId: g.accountId, email: g.email }))} />
+  ) : null;
 }
 
 async function InboxContent({ searchParams }: { searchParams: PageProps<"/inbox">["searchParams"] }) {
   const sp = await searchParams;
-  const gmail = await getMyGmail();
-  if (!gmail) return <ConnectGmail failed={sp.gmail_error !== undefined} errorCode={typeof sp.error === "string" ? sp.error : undefined} />;
+  const gmails = await getMyGmails();
+  const errorCode = typeof sp.error === "string" ? sp.error : undefined;
+  if (gmails.length === 0) return <ConnectGmail failed={sp.gmail_error !== undefined} errorCode={errorCode} />;
 
   const status: InboxStatus = sp.status === "added" || sp.status === "dismissed" ? sp.status : "new";
   const [{ items, counts }, settings] = await Promise.all([getMyInbox(status), getMySettings()]);
-  // The first sync has not finished yet. Show progress only while it runs (or is about to start, right
-  // after connecting); a first sync that failed shows the empty Inbox and is retried by the next run.
-  const firstSync = gmail.status === "active" && !gmail.lastSyncedAt;
-  const firstSyncRunning = firstSync && (gmail.syncing || sp.connected === "1");
+
+  // A Gmail whose first sync has not finished. Show progress only while it runs (or is about to start, right
+  // after connecting); a first sync that failed shows the Inbox as it is and is retried by the next run.
+  const syncing = gmails.some((g) => g.syncing);
+  const firstSyncs = gmails.filter((g) => g.status === "active" && !g.lastSyncedAt && (g.syncing || sp.connected === "1"));
+  const nothingSyncedYet = gmails.every((g) => !g.lastSyncedAt);
 
   return (
     <>
-      <SyncWatcher syncing={gmail.syncing || firstSyncRunning} justConnected={sp.connected === "1"} />
-      {gmail.status === "needs_reconnect" ? <ReconnectBanner problem={gmail.problem} /> : null}
-      {gmail.status === "active" && gmail.problem ? (
-        <p role="status" className="rounded-xl border bg-muted/50 px-4 py-3 text-sm">
-          {gmail.problem}
+      <SyncWatcher syncing={syncing || firstSyncs.length > 0} justConnected={sp.connected === "1"} />
+      {sp.gmail_error !== undefined ? (
+        <p role="alert" className="rounded-xl border bg-muted/50 px-4 py-3 text-sm text-destructive">
+          {linkErrorMessage(errorCode)}
         </p>
       ) : null}
-      {firstSyncRunning ? (
+      {gmails.map((g) =>
+        g.status === "needs_reconnect" ? (
+          <ReconnectBanner key={g.accountId} problem={g.problem} email={g.email} />
+        ) : g.problem ? (
+          <p key={g.accountId} role="status" className="rounded-xl border bg-muted/50 px-4 py-3 text-sm">
+            {g.email ? `${g.email}: ` : null}
+            {g.problem}
+          </p>
+        ) : null,
+      )}
+      {firstSyncs.length > 0 && nothingSyncedYet ? (
         <div className="flex flex-col items-center gap-3 rounded-xl bg-card px-6 py-16 text-center framed" aria-live="polite">
           <Spinner className="size-6" />
           <p>Reading the last 30 days of your email</p>
           <p className="max-w-sm text-sm text-muted-foreground">This takes up to a minute. Suggestions appear here on their own.</p>
         </div>
       ) : (
-        <InboxView
-          status={status}
-          items={items}
-          counts={counts}
-          timezone={settings.timezone ?? "UTC"}
-          defaultLeadMinutes={settings.defaultLeadMinutes}
-          initialItemId={typeof sp.item === "string" ? sp.item : undefined}
-          gmailAddress={gmail.email}
-        />
+        <>
+          {firstSyncs.length > 0 ? (
+            <p role="status" className="flex items-center gap-2 rounded-xl border bg-muted/50 px-4 py-3 text-sm" aria-live="polite">
+              <Spinner />
+              Reading the last 30 days of your new Gmail. Its suggestions appear here on their own.
+            </p>
+          ) : null}
+          <InboxView
+            status={status}
+            items={items}
+            counts={counts}
+            timezone={settings.timezone ?? "UTC"}
+            defaultLeadMinutes={settings.defaultLeadMinutes}
+            initialItemId={typeof sp.item === "string" ? sp.item : undefined}
+            showAccount={gmails.length > 1}
+          />
+        </>
       )}
     </>
   );

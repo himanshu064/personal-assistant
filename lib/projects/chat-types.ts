@@ -3,6 +3,8 @@ import type { UIMessage } from "ai";
 export type ChatMetadata = {
   /** Set on the first answer of a new chat, so the browser knows which chat it is in. */
   threadId?: string;
+  /** Sent with each finished answer, and saved with it. */
+  usage?: { inputTokens: number; outputTokens: number; model: string };
 };
 
 export type ProjectChatMessage = UIMessage<ChatMetadata>;

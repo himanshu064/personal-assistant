@@ -1,16 +1,16 @@
 "use server";
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { updateTag } from "next/cache";
 import { db } from "@/db";
 import { aiKeys, userSettings } from "@/db/schema";
 import { isAllowedModel, MODEL_CATALOG, resolveModelChoice } from "@/lib/ai/models";
 import { PROVIDER_LABELS, type AiProvider } from "@/lib/ai/providers";
 import { verifyApiKey } from "@/lib/ai/verify-key";
-import { encrypt } from "@/lib/crypto";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { settingsTag } from "@/lib/data/settings";
 import { requireUser } from "@/lib/session";
-import { apiKeySchema, isValidTimezone, preferencesSchema, providerSchema } from "@/lib/validation/settings";
+import { apiKeySchema, isValidTimezone, keyIdSchema, preferencesSchema } from "@/lib/validation/settings";
 
 export type ActionResult = { ok: true; message?: string } | { ok: false; error: string; field?: string };
 
@@ -52,39 +52,98 @@ export async function saveDetectedTimezone(timezone: string): Promise<void> {
   if (inserted.length > 0) updateTag(settingsTag(user.id));
 }
 
+/** Checks a new key with the provider, then saves it. The first key for a provider is put in use. */
 export async function saveApiKey(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
   const parsed = apiKeySchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the key.", field: "apiKey" };
+    const issue = parsed.error.issues[0];
+    return { ok: false, error: issue?.message ?? "Check the key.", field: issue?.path[0] === "label" ? "label" : "apiKey" };
+  }
+  const { provider, apiKey } = parsed.data;
+
+  const existing = await db
+    .select({ encryptedKey: aiKeys.encryptedKey, isActive: aiKeys.isActive })
+    .from(aiKeys)
+    .where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, provider)));
+  if (existing.some((k) => decrypt(k.encryptedKey) === apiKey)) {
+    return { ok: false, error: "This key is already saved.", field: "apiKey" };
   }
 
-  const { provider, apiKey } = parsed.data;
   const check = await verifyApiKey(provider, apiKey);
   if (!check.ok) return { ok: false, error: check.message, field: "apiKey" };
 
-  const encryptedKey = encrypt(apiKey);
-  const last4 = apiKey.slice(-4);
-  await db
-    .insert(aiKeys)
-    .values({ userId: user.id, provider, encryptedKey, last4 })
-    .onConflictDoUpdate({ target: [aiKeys.userId, aiKeys.provider], set: { encryptedKey, last4 } });
-
-  const switched = await switchToProviderWithKey(user.id, provider);
+  const isActive = !existing.some((k) => k.isActive);
+  const label = parsed.data.label || `Key ${existing.length + 1}`;
+  await db.insert(aiKeys).values({ userId: user.id, provider, label, encryptedKey: encrypt(apiKey), last4: apiKey.slice(-4), isActive });
+  const switched = isActive ? await switchToProviderWithKey(user.id, provider) : null;
   updateTag(settingsTag(user.id));
   return { ok: true, message: `Key checked and saved.${switchedMessage(switched)}` };
 }
 
+/** "Use this key": puts the key in use for its provider, and makes that provider the one every AI feature uses. */
+export async function selectApiKey(input: unknown): Promise<ActionResult> {
+  const user = await requireUser();
+  const parsed = keyIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Unknown key." };
+
+  // Both reads at once, then the writes in one transaction.
+  const [[key], [settings]] = await Promise.all([
+    db
+      .select({ provider: aiKeys.provider, label: aiKeys.label })
+      .from(aiKeys)
+      .where(and(eq(aiKeys.id, parsed.data.id), eq(aiKeys.userId, user.id)))
+      .limit(1),
+    db.select({ model: userSettings.model }).from(userSettings).where(eq(userSettings.userId, user.id)).limit(1),
+  ]);
+  if (!key) return { ok: false, error: "This key no longer exists." };
+  // Keep the chosen model when the provider offers it, else its cheapest.
+  const model = settings?.model && isAllowedModel(key.provider, settings.model) ? settings.model : MODEL_CATALOG.providers[key.provider].defaultModel;
+
+  await db.transaction(async (tx) => {
+    // Off first, then on: the unique index allows one key in use per provider.
+    await tx.update(aiKeys).set({ isActive: false }).where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, key.provider), eq(aiKeys.isActive, true)));
+    await tx.update(aiKeys).set({ isActive: true }).where(eq(aiKeys.id, parsed.data.id));
+    await tx
+      .insert(userSettings)
+      .values({ userId: user.id, provider: key.provider, model })
+      .onConflictDoUpdate({ target: userSettings.userId, set: { provider: key.provider, model } });
+  });
+  updateTag(settingsTag(user.id));
+  return { ok: true, message: `Now using "${key.label}" (${PROVIDER_LABELS[key.provider]}).` };
+}
+
+/** Removes a key. If it was in use, the newest other key of the same provider takes over. */
 export async function deleteApiKey(input: unknown): Promise<ActionResult> {
   const user = await requireUser();
-  const parsed = providerSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Unknown provider." };
+  const parsed = keyIdSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Unknown key." };
 
-  const { provider } = parsed.data;
-  await db.delete(aiKeys).where(and(eq(aiKeys.userId, user.id), eq(aiKeys.provider, provider)));
-  const switched = await switchToProviderWithKey(user.id, provider === "anthropic" ? "google" : "anthropic");
+  const [removed] = await db
+    .delete(aiKeys)
+    .where(and(eq(aiKeys.id, parsed.data.id), eq(aiKeys.userId, user.id)))
+    .returning({ provider: aiKeys.provider, isActive: aiKeys.isActive });
+  if (!removed) return { ok: false, error: "This key no longer exists." };
+
+  let next: string | null = null;
+  if (removed.isActive) {
+    const [replacement] = await db
+      .update(aiKeys)
+      .set({ isActive: true })
+      .where(
+        eq(
+          aiKeys.id,
+          sql`(select id from ai_keys where user_id = ${user.id} and provider = ${removed.provider} order by created_at desc limit 1)`,
+        ),
+      )
+      .returning({ label: aiKeys.label });
+    next = replacement?.label ?? null;
+  }
+  // Only removing the last key in use for a provider can leave the selected provider without one.
+  const switched =
+    removed.isActive && !next ? await switchToProviderWithKey(user.id, removed.provider === "anthropic" ? "google" : "anthropic") : null;
   updateTag(settingsTag(user.id));
-  return { ok: true, message: `Key removed.${switchedMessage(switched)}` };
+  return { ok: true, message: `Key removed.${next ? ` Now using "${next}".` : ""}${switchedMessage(switched)}` };
 }
 
 /**
@@ -96,7 +155,7 @@ export async function deleteApiKey(input: unknown): Promise<ActionResult> {
 async function switchToProviderWithKey(userId: string, candidate: AiProvider): Promise<AiProvider | null> {
   const [settingsRows, keyRows] = await Promise.all([
     db.select({ provider: userSettings.provider, model: userSettings.model }).from(userSettings).where(eq(userSettings.userId, userId)),
-    db.select({ provider: aiKeys.provider }).from(aiKeys).where(eq(aiKeys.userId, userId)),
+    db.select({ provider: aiKeys.provider }).from(aiKeys).where(and(eq(aiKeys.userId, userId), eq(aiKeys.isActive, true))),
   ]);
   const withKey = new Set(keyRows.map((r) => r.provider));
   const selected = resolveModelChoice({ provider: settingsRows[0]?.provider ?? null, model: settingsRows[0]?.model ?? null }).provider;

@@ -22,10 +22,11 @@ export function useConnectGmail() {
       errorCallbackURL: "/inbox?gmail_error=1",
     });
     // On success the browser is already leaving for Google.
-    if (error) {
-      setConnecting(false);
-      setError(error.status === 429 ? "Too many attempts. Wait a minute and try again." : "Could not open Google. Try again.");
-    }
+    if (!error) return null;
+    const message = error.status === 429 ? "Too many attempts. Wait a minute and try again." : "Could not open Google. Try again.";
+    setConnecting(false);
+    setError(message);
+    return message;
   }
 
   return { connect, connecting, error };
@@ -34,7 +35,7 @@ export function useConnectGmail() {
 const POINTS = [
   { icon: CalendarClockIcon, text: "Finds meeting invites, appointments and deadlines in your email." },
   { icon: EyeIcon, text: "Read only. The app never sends, deletes or changes your mail." },
-  { icon: ShieldCheckIcon, text: "Nothing becomes a reminder until you tap Create reminder." },
+  { icon: ShieldCheckIcon, text: "Meeting invites become reminders by themselves. Everything else waits until you tap Create reminder." },
 ];
 
 /** Better Auth sends ?error=<code> back when linking fails. */
@@ -43,14 +44,17 @@ const LINK_ERRORS: Record<string, string> = {
   account_already_linked_to_different_user: "That Gmail is already connected to another account in this app.",
 };
 
+/** The message for a failed connect, from Better Auth's ?error=<code>. */
+export function linkErrorMessage(errorCode?: string) {
+  return (
+    (errorCode && LINK_ERRORS[errorCode]) ??
+    "Gmail was not connected. If Google said access was blocked, ask the app owner to add your address as a test user."
+  );
+}
+
 export function ConnectGmail({ failed, errorCode }: { failed?: boolean; errorCode?: string }) {
   const { connect, connecting, error } = useConnectGmail();
-  const message =
-    error ??
-    (failed
-      ? (errorCode && LINK_ERRORS[errorCode]) ??
-        "Gmail was not connected. If Google said access was blocked, ask the app owner to add your address as a test user."
-      : null);
+  const message = error ?? (failed ? linkErrorMessage(errorCode) : null);
 
   return (
     <div className="flex flex-col items-center gap-6 rounded-xl bg-card px-6 py-12 text-center framed">
@@ -59,7 +63,9 @@ export function ConnectGmail({ failed, errorCode }: { failed?: boolean; errorCod
       </span>
       <div className="flex max-w-md flex-col gap-1.5">
         <h2 className="text-xl tracking-tight">Connect your Gmail</h2>
-        <p className="text-sm text-muted-foreground">Your assistant checks your email every 30 minutes and suggests reminders for what matters.</p>
+        <p className="text-sm text-muted-foreground">
+          Your assistant checks your email every few minutes and suggests reminders for what matters. You can connect more than one Gmail.
+        </p>
       </div>
       <ul className="flex max-w-md flex-col gap-3 text-left text-sm">
         {POINTS.map(({ icon: Icon, text }) => (

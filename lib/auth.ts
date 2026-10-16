@@ -69,7 +69,8 @@ export const auth = betterAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
       // Always return a refresh token, so syncing works while the user is away.
       accessType: "offline",
-      prompt: "consent",
+      // Google always asks which account, so a second Gmail can be connected.
+      prompt: "select_account consent",
       disableSignUp: true,
     },
   },

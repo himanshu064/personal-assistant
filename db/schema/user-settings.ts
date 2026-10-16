@@ -11,7 +11,8 @@ export const userSettings = pgTable("user_settings", {
   timezone: text("timezone"),
   provider: aiProviderEnum("provider"),
   model: text("model"),
-  defaultLeadMinutes: integer("default_lead_minutes").notNull().default(0),
+  /** Alert this many minutes before, for every new reminder (typed, spoken or from a meeting invite) unless it says otherwise. */
+  defaultLeadMinutes: integer("default_lead_minutes").notNull().default(20),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()

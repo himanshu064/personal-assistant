@@ -39,7 +39,7 @@ export function ChatMessage({
     <li className="group flex flex-col gap-2 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300">
       <Markdown>{text}</Markdown>
       {!streaming && text ? (
-        <div className="-ml-2 flex gap-0.5 text-muted-foreground">
+        <div className="-ml-2 flex items-center gap-0.5 text-muted-foreground">
           <Button
             variant="ghost"
             size="icon-sm"
@@ -58,8 +58,20 @@ export function ChatMessage({
               <RotateCwIcon />
             </Button>
           ) : null}
+          {message.metadata?.usage ? <TokenUsage {...message.metadata.usage} /> : null}
         </div>
       ) : null}
     </li>
+  );
+}
+
+const tokens = new Intl.NumberFormat("en-US");
+
+/** Tokens this answer used, so the user can see what each reply costs. */
+function TokenUsage({ inputTokens, outputTokens, model }: { inputTokens: number; outputTokens: number; model: string }) {
+  return (
+    <span className="ml-2 text-xs tabular-nums" title={`${tokens.format(inputTokens)} tokens sent, ${tokens.format(outputTokens)} tokens in the answer`}>
+      {tokens.format(inputTokens + outputTokens)} tokens ({tokens.format(inputTokens)} in, {tokens.format(outputTokens)} out) · <span className="font-mono">{model}</span>
+    </span>
   );
 }

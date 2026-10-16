@@ -2,16 +2,15 @@ import "server-only";
 import { after } from "next/server";
 import { APIError } from "better-auth/api";
 import { db } from "@/db";
-import { and, eq, ne } from "drizzle-orm";
-import { account, emailItems, gmailSync } from "@/db/schema";
+import { gmailSync } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { refreshInbox } from "./refresh";
 import { GmailAuthError } from "./client";
 import { GMAIL_SCOPE } from "./scope";
 
 /**
- * Runs when Google sends the user back after "Connect Gmail" (first time or
- * reconnect). Google lets people untick "read your email" on its consent
+ * Runs when Google sends the user back after "Connect Gmail" (a new Gmail,
+ * another one, or a reconnect). Google lets people untick "read your email" on its consent
  * screen; without that permission the connection is marked for reconnecting.
  */
 export async function onGmailLinked({ userId, accountId, scope }: { userId: string; accountId: string; scope: string }) {
@@ -19,28 +18,19 @@ export async function onGmailLinked({ userId, accountId, scope }: { userId: stri
   const status = allowed ? ("active" as const) : ("needs_reconnect" as const);
   const problem = allowed ? null : "Gmail was connected without permission to read email. Reconnect and allow it.";
 
-  const [existing] = await db.select({ accountId: gmailSync.accountId }).from(gmailSync).where(eq(gmailSync.userId, userId)).limit(1);
-  if (!existing) {
-    await db.insert(gmailSync).values({ userId, accountId, status, problem }).onConflictDoUpdate({ target: gmailSync.userId, set: { accountId, status, problem } });
-  } else if (existing.accountId === accountId) {
-    // Reconnecting the same Gmail: carry on from the last sync (no gap, nothing read twice).
-    await db.update(gmailSync).set({ status, problem }).where(eq(gmailSync.userId, userId));
-  } else {
-    // A different Gmail: forget the old one completely and start a fresh first sync.
-    await db
-      .update(gmailSync)
-      .set({ accountId, status, problem, email: null, lastSyncedAt: null, syncStartedAt: null })
-      .where(eq(gmailSync.userId, userId));
-    await db.delete(emailItems).where(eq(emailItems.userId, userId));
-    await db.delete(account).where(and(eq(account.userId, userId), eq(account.providerId, "google"), ne(account.id, accountId)));
-  }
+  // A new Gmail adds a row; reconnecting one carries on from its last sync
+  // (no gap, nothing read twice). Other connected Gmails are left alone.
+  await db
+    .insert(gmailSync)
+    .values({ userId, accountId, status, problem })
+    .onConflictDoUpdate({ target: gmailSync.accountId, set: { status, problem } });
   refreshInbox(userId);
 
   if (!allowed) return;
   // First sync after the redirect, so connecting feels instant.
   const run = async () => {
     const { syncGmail } = await import("./sync");
-    await syncGmail(userId).catch((error) => console.warn("gmail.first_sync_failed", { message: String(error) }));
+    await syncGmail(accountId).catch((error) => console.warn("gmail.first_sync_failed", { message: String(error) }));
   };
   try {
     after(run);

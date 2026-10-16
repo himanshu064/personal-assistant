@@ -3,7 +3,6 @@ import { Suspense } from "react";
 import { AlarmClockIcon, BellIcon, CalendarCheckIcon, CircleCheckIcon, ListChecksIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Page } from "@/components/app-shell/page";
-import { NewReminder } from "@/components/reminders/new-reminder";
 import { NewReminderButton } from "@/components/reminders/new-reminder-button";
 import { NotificationsPrompt } from "@/components/reminders/notifications-prompt";
 import { Badge } from "@/components/ui/badge";
@@ -39,34 +38,22 @@ export default function DashboardPage() {
         <Stats />
       </Suspense>
 
-      <div className="grid gap-5 lg:grid-cols-5">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Quick capture</CardTitle>
-            <CardDescription>Say it the way you would tell a friend.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <NewReminder />
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-3">
-          <CardHeader>
-            <CardTitle>Up next</CardTitle>
-            <CardDescription>Your next five reminders.</CardDescription>
-            <CardAction>
-              <Link href="/reminders" className="text-sm font-medium underline-offset-4 hover:underline">
-                View all
-              </Link>
-            </CardAction>
-          </CardHeader>
-          <CardContent>
-            <Suspense fallback={<ListSkeleton />}>
-              <UpNext />
-            </Suspense>
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Up next</CardTitle>
+          <CardDescription>Your next five reminders.</CardDescription>
+          <CardAction>
+            <Link href="/reminders" className="text-sm font-medium underline-offset-4 hover:underline">
+              View all
+            </Link>
+          </CardAction>
+        </CardHeader>
+        <CardContent>
+          <Suspense fallback={<ListSkeleton />}>
+            <UpNext />
+          </Suspense>
+        </CardContent>
+      </Card>
     </Page>
   );
 }
@@ -137,7 +124,7 @@ async function Stats() {
           ) : (
             <>
               <span className="text-xl">Nothing scheduled</span>
-              <span className="text-xs text-muted-foreground">Use Quick capture to add one</span>
+              <span className="text-xs text-muted-foreground">Tap the mic and say what to remember</span>
             </>
           )}
         </CardContent>
@@ -155,7 +142,7 @@ async function UpNext() {
           <BellIcon className="size-[18px] text-muted-foreground" strokeWidth={1.5} aria-hidden />
         </span>
         <p className="text-[15px]">Nothing coming up</p>
-        <p className="text-sm text-muted-foreground">Say or type a reminder in Quick capture.</p>
+        <p className="text-sm text-muted-foreground">Tap the mic and say what to remember.</p>
       </div>
     );
   }

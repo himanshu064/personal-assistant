@@ -42,7 +42,7 @@ const KINDS: { kind: Kind; label: string; dot: string }[] = [
 const KIND_LABEL: Record<Kind, string> = { meeting: "Meeting", reminder: "Reminder", deadline: "Deadline" };
 
 const EMPTY: Record<InboxStatus, { title: string; description: string }> = {
-  new: { title: "No new suggestions", description: "Meetings and deadlines found in your email appear here. The next check runs within 30 minutes." },
+  new: { title: "No new suggestions", description: "Meetings and deadlines found in your email appear here. The next check runs within a few minutes." },
   added: { title: "Nothing added yet", description: "Suggestions you turn into reminders move here." },
   dismissed: { title: "Nothing dismissed", description: "Suggestions you dismiss move here, in case you change your mind." },
 };
@@ -59,7 +59,7 @@ export function InboxView({
   timezone,
   defaultLeadMinutes,
   initialItemId,
-  gmailAddress,
+  showAccount,
 }: {
   status: InboxStatus;
   items: InboxItem[];
@@ -67,7 +67,8 @@ export function InboxView({
   timezone: string;
   defaultLeadMinutes: number;
   initialItemId?: string;
-  gmailAddress: string | null;
+  /** Several Gmails are connected: say which one each email came to. */
+  showAccount: boolean;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<Kind | "all">("all");
@@ -211,7 +212,7 @@ export function InboxView({
             item={selected}
             timezone={timezone}
             defaultLeadMinutes={defaultLeadMinutes}
-            gmailAddress={gmailAddress}
+            showAccount={showAccount}
             onBack={() => select(null)}
           />
         ) : (
@@ -229,19 +230,19 @@ function Details({
   item,
   timezone,
   defaultLeadMinutes,
-  gmailAddress,
+  showAccount,
   onBack,
 }: {
   item: InboxItem;
   timezone: string;
   defaultLeadMinutes: number;
-  gmailAddress: string | null;
+  showAccount: boolean;
   onBack: () => void;
 }) {
   const [pending, startTransition] = useTransition();
   const [creating, setCreating] = useState(false);
   // authuser opens the connected mailbox even when several Google accounts are signed in.
-  const gmailUrl = `https://mail.google.com/mail/${gmailAddress ? `?authuser=${encodeURIComponent(gmailAddress)}` : "u/0/"}#all/${item.gmailMessageId}`;
+  const gmailUrl = `https://mail.google.com/mail/${item.accountEmail ? `?authuser=${encodeURIComponent(item.accountEmail)}` : "u/0/"}#all/${item.gmailMessageId}`;
 
   function setStatus(next: "new" | "dismissed") {
     startTransition(async () => {
@@ -315,6 +316,7 @@ function Details({
             </div>
             <p className="text-sm">{item.subject}</p>
             <p className="truncate text-xs text-muted-foreground">{item.fromAddress}</p>
+            {showAccount && item.accountEmail ? <p className="truncate text-xs text-muted-foreground">To {item.accountEmail}</p> : null}
           </div>
         </div>
 

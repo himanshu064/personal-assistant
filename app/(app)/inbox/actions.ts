@@ -12,17 +12,21 @@ import { requireUser } from "@/lib/session";
 
 type Fail = { ok: false; error: string };
 
-/** "Sync now": reads new mail straight away instead of waiting for the next 30 minute run. */
+/** "Sync now": reads new mail in every connected Gmail straight away instead of waiting for the next 30 minute run. */
 export async function syncNow(): Promise<{ ok: true; message: string } | Fail> {
   const user = await requireUser();
-  const result = await syncGmail(user.id);
+  const connections = await db.select({ accountId: gmailSync.accountId }).from(gmailSync).where(eq(gmailSync.userId, user.id));
+  const results = await Promise.all(connections.map((c) => syncGmail(c.accountId)));
   updateTag(inboxTag(user.id));
-  if (result.ok) {
+
+  const done = results.filter((r) => r.ok);
+  if (done.length > 0) {
+    const suggested = done.reduce((sum, r) => sum + r.suggested, 0);
     return {
       ok: true,
       message:
-        result.suggested > 0
-          ? `Found ${result.suggested} new ${result.suggested === 1 ? "suggestion" : "suggestions"}.`
+        suggested > 0
+          ? `Found ${suggested} new ${suggested === 1 ? "suggestion" : "suggestions"}.`
           : "You are up to date. Nothing new to suggest.",
     };
   }
@@ -32,7 +36,8 @@ export async function syncNow(): Promise<{ ok: true; message: string } | Fail> {
     reconnect: "Gmail needs to be reconnected.",
     error: "Gmail could not be read just now. Try again in a minute.",
   } as const;
-  return { ok: false, error: errors[result.reason] };
+  const failed = results.find((r) => !r.ok);
+  return { ok: false, error: errors[failed && !failed.ok ? failed.reason : "not_connected"] };
 }
 
 /** Dismiss a suggestion, or bring a dismissed one back. Added ones stay added. */
@@ -53,34 +58,35 @@ export async function setSuggestionStatus(id: unknown, status: unknown): Promise
 }
 
 /**
- * Disconnects Gmail: asks Google to revoke access, then deletes the stored
- * tokens, the sync record and every suggestion. Reminders already made stay.
+ * Disconnects one Gmail: asks Google to revoke access, then deletes its
+ * stored tokens. Its sync record and suggestions go with it (foreign key
+ * cascade). Other Gmails and reminders already made stay.
  */
-export async function disconnectGmail(): Promise<{ ok: true } | Fail> {
+export async function disconnectGmail(accountId: unknown): Promise<{ ok: true } | Fail> {
   const user = await requireUser();
+  const id = z.uuid().safeParse(accountId);
+  if (!id.success) return { ok: false, error: "Something went wrong. Try again." };
+
   const [connection] = await db
     .select({ accountId: gmailSync.accountId })
     .from(gmailSync)
-    .where(eq(gmailSync.userId, user.id))
+    .where(and(eq(gmailSync.accountId, id.data), eq(gmailSync.userId, user.id)))
     .limit(1);
+  if (!connection) return { ok: false, error: "This Gmail is not connected." };
 
-  if (connection) {
-    // Best effort: if the token already expired, Google has nothing to revoke.
-    try {
-      const token = await getGmailAccessToken(user.id, connection.accountId);
-      await fetch("https://oauth2.googleapis.com/revoke", {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ token }),
-      });
-    } catch (error) {
-      console.warn("gmail.revoke_failed", { message: error instanceof Error ? error.message : String(error) });
-    }
+  // Best effort: if the token already expired, Google has nothing to revoke.
+  try {
+    const token = await getGmailAccessToken(user.id, connection.accountId);
+    await fetch("https://oauth2.googleapis.com/revoke", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ token }),
+    });
+  } catch (error) {
+    console.warn("gmail.revoke_failed", { message: error instanceof Error ? error.message : String(error) });
   }
 
-  // Deleting the Google account row also deletes gmail_sync (foreign key cascade).
-  await db.delete(account).where(and(eq(account.userId, user.id), eq(account.providerId, "google")));
-  await db.delete(emailItems).where(eq(emailItems.userId, user.id));
+  await db.delete(account).where(and(eq(account.id, connection.accountId), eq(account.userId, user.id)));
   updateTag(inboxTag(user.id));
   return { ok: true };
 }
