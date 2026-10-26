@@ -2,14 +2,17 @@
 
 import { useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { ArrowLeftIcon, BellIcon, ChevronRightIcon, FolderIcon, MessageCircleIcon } from "lucide-react";
 import { browserTimezone, ReminderPreview, type Preview } from "@/components/reminders/new-reminder";
-import { ModalBody, ModalFooter } from "@/components/common/responsive-modal";
+import { ModalBody } from "@/components/common/responsive-modal";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { VoiceCapture } from "@/components/reminders/voice-capture";
 import { askAssistant, type AssistantChoice } from "@/app/(app)/assistant/actions";
 import { showSavedReminder } from "@/components/reminders/saved-toast";
 import { handOff, QUICK_CHAT_HANDOFF } from "@/lib/assistant/handoff";
 import { safeAction } from "@/lib/safe-action";
+import { formatReminderTime, fromLocalInputValue } from "@/lib/time";
 
 type Step =
   | { kind: "listen" }
@@ -67,24 +70,43 @@ export function Assistant({ onDone }: { onDone: () => void }) {
 
   if (step.kind === "choose") {
     return (
-      <>
-        <ModalBody className="justify-center">
-          <p className="text-center text-sm text-muted-foreground">Where should this go?</p>
-          <p className="text-center">&ldquo;{step.heard}&rdquo;</p>
-          <div className="flex flex-col gap-2">
-            {step.options.map((option) => (
-              <Button key={choiceKey(option)} variant="outline" size="page" onClick={() => go(option, step.heard, step.source)}>
-                <span className="truncate">{choiceLabel(option)}</span>
-              </Button>
-            ))}
-          </div>
-        </ModalBody>
-        <ModalFooter>
-          <Button variant="ghost" size="page" onClick={() => setStep({ kind: "listen" })}>
-            Back
-          </Button>
-        </ModalFooter>
-      </>
+      <ModalBody className="justify-center gap-6">
+        <div className="flex flex-col items-center gap-2 text-center">
+          <h2 className="text-2xl tracking-tight text-balance md:text-3xl">Where should this go?</h2>
+          <p className="text-muted-foreground text-balance">&ldquo;{step.heard}&rdquo;</p>
+        </div>
+        <ul className="flex flex-col overflow-hidden rounded-xl bg-card framed" aria-label="Choices">
+          {step.options.map((option, i) => {
+            const { icon: Icon, title, detail } = describeChoice(option);
+            return (
+              <li key={choiceKey(option)} className="border-b last:border-b-0">
+                <button
+                  type="button"
+                  onClick={() => go(option, step.heard, step.source)}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left outline-none transition-colors duration-150 hover:bg-muted/60 focus-visible:bg-muted/60"
+                >
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-muted" aria-hidden>
+                    <Icon className="size-5" strokeWidth={1.5} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="flex items-center gap-2">
+                      <span className="truncate">{title}</span>
+                      {/* The AI's first pick comes first. */}
+                      {i === 0 ? <Badge variant="success">Best match</Badge> : null}
+                    </span>
+                    <span className="truncate text-sm text-muted-foreground">{detail}</span>
+                  </span>
+                  <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <Button variant="ghost" size="sm" className="self-center text-muted-foreground" onClick={() => setStep({ kind: "listen" })}>
+          <ArrowLeftIcon />
+          Say it again
+        </Button>
+      </ModalBody>
     );
   }
 
@@ -108,10 +130,18 @@ export function Assistant({ onDone }: { onDone: () => void }) {
   );
 }
 
-function choiceLabel(choice: AssistantChoice) {
-  if (choice.kind === "reminder") return `Reminder: ${choice.draft.title || "new reminder"}`;
-  if (choice.kind === "project") return `Add to ${choice.projectName}`;
-  return "New chat";
+/** What each choice shows: an icon, what it is, and what happens when picked. */
+function describeChoice(choice: AssistantChoice) {
+  if (choice.kind === "reminder") {
+    const at = choice.draft.remindAt ? fromLocalInputValue(choice.draft.remindAt, choice.timezone) : null;
+    return {
+      icon: BellIcon,
+      title: `Reminder: ${choice.draft.title || "new reminder"}`,
+      detail: at ? formatReminderTime(at, choice.timezone) : "You pick the time next",
+    };
+  }
+  if (choice.kind === "project") return { icon: FolderIcon, title: `Add to ${choice.projectName}`, detail: "Project: saved to its chat and memory" };
+  return { icon: MessageCircleIcon, title: "New chat", detail: "Ask or talk about it in a new chat" };
 }
 
 function choiceKey(choice: AssistantChoice) {

@@ -47,6 +47,9 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/projects/[p
         "- When they share information, confirm it briefly. When it helps, show a running summary, for example a Markdown table of who gave whom how much.\n" +
         "- When they ask, answer from the project memory and this conversation. Do the arithmetic carefully and show the parts of a total.\n" +
         "- If something is unclear (for example, whether money was a loan or a gift), say what you assumed, in one line.\n" +
+        "- Messages are often spoken, and speech recognition mishears names as common words ('Lakshay' as 'lecture'). " +
+        "When a word sounds like a name in the project memory and fits as a name, read it as that name and use it. " +
+        "If it could be a new person, ask in one line.\n" +
         "- If you do not know, say so. Never invent facts.\n" +
         "- Keep replies short. Use Markdown (bold, lists, tables) only when it makes the answer clearer.\n" +
         `Today is ${today}.\n\n` +

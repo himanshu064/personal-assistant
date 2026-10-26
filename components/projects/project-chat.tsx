@@ -441,6 +441,7 @@ export function ProjectChat({
               )}
             </div>
             {speechError ? <p className="mx-auto mt-2 max-w-3xl text-xs text-destructive">{speechError}</p> : null}
+            <ChatTotal messages={messages} />
           </form>
         ) : (
           // Without a key, saved chats stay readable; only sending needs one.
@@ -496,5 +497,27 @@ export function ProjectChat({
         </ModalFooter>
       </ResponsiveModal>
     </div>
+  );
+}
+
+const tokenCount = new Intl.NumberFormat("en-US");
+
+/**
+ * The whole chat's tokens: every answer's tokens added up (each answer's "in"
+ * already includes the history it was sent). Background project memory
+ * updates are not part of it; Settings > AI keys > Usage has those.
+ */
+function ChatTotal({ messages }: { messages: ProjectChatMessage[] }) {
+  let inputTokens = 0;
+  let outputTokens = 0;
+  for (const m of messages) {
+    inputTokens += m.metadata?.usage?.inputTokens ?? 0;
+    outputTokens += m.metadata?.usage?.outputTokens ?? 0;
+  }
+  if (inputTokens + outputTokens === 0) return null;
+  return (
+    <p className="mx-auto mt-2 max-w-3xl text-right text-xs text-muted-foreground tabular-nums">
+      This chat: {tokenCount.format(inputTokens + outputTokens)} tokens ({tokenCount.format(inputTokens)} in, {tokenCount.format(outputTokens)} out)
+    </p>
   );
 }

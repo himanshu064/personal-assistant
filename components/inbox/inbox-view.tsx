@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useSyncExternalStore, useTransition } from "react";
 import {
+  ArchiveXIcon,
   ArrowLeftIcon,
   BellPlusIcon,
   CalendarIcon,
   CheckIcon,
+  CircleCheckIcon,
   ExternalLinkIcon,
   InboxIcon,
   LinkIcon,
@@ -34,12 +36,23 @@ import { CreateFromSuggestion } from "./create-from-suggestion";
 type Kind = InboxItem["kind"];
 
 const STATUS_LABELS: Record<InboxStatus, string> = { new: "New", added: "Added", dismissed: "Dismissed" };
+const STATUS_ICONS: Record<InboxStatus, typeof InboxIcon> = { new: InboxIcon, added: CircleCheckIcon, dismissed: ArchiveXIcon };
 const KINDS: { kind: Kind; label: string; dot: string }[] = [
   { kind: "meeting", label: "Meetings", dot: "bg-[#2f6fd6]" },
   { kind: "reminder", label: "Reminders", dot: "bg-[#3f7d3a]" },
   { kind: "deadline", label: "Deadlines", dot: "bg-[#d2642a]" },
 ];
 const KIND_LABEL: Record<Kind, string> = { meeting: "Meeting", reminder: "Reminder", deadline: "Deadline" };
+/** The soft pill in the same colour as the type's dot in the filters. */
+const KIND_BADGE: Record<Kind, "info" | "success" | "warning"> = { meeting: "info", reminder: "success", deadline: "warning" };
+
+/** Wide enough for the three panes (Tailwind lg): a suggestion is always open there. */
+const WIDE_QUERY = "(min-width: 1024px)";
+function subscribeWide(onChange: () => void) {
+  const mq = window.matchMedia(WIDE_QUERY);
+  mq.addEventListener("change", onChange);
+  return () => mq.removeEventListener("change", onChange);
+}
 
 const EMPTY: Record<InboxStatus, { title: string; description: string }> = {
   new: { title: "No new suggestions", description: "Meetings and deadlines found in your email appear here. The next check runs at 6 AM. Tap Sync now to check right away." },
@@ -87,7 +100,10 @@ export function InboxView({
         (!q || `${i.title} ${i.subject} ${i.fromName} ${i.fromAddress} ${i.snippet}`.toLowerCase().includes(q)),
     );
   }, [items, kind, query]);
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const wide = useSyncExternalStore(subscribeWide, () => window.matchMedia(WIDE_QUERY).matches, () => false);
+  // On a wide screen the details pane is never empty: nothing picked (or the picked one
+  // was just dismissed or added) shows the first in the list. Phones keep the list.
+  const selected = items.find((i) => i.id === selectedId) ?? (wide ? (visible[0] ?? null) : null);
 
   function select(id: string | null) {
     setSelectedId(id);
@@ -104,20 +120,24 @@ export function InboxView({
     <div className="overflow-hidden rounded-xl bg-card framed lg:grid lg:h-[calc(100dvh-15rem)] lg:min-h-[34rem] lg:grid-cols-[13rem_22rem_minmax(0,1fr)]">
       {/* Filters: a column on desktop. */}
       <nav aria-label="Suggestion filters" className="hidden flex-col gap-1 border-r p-3 lg:flex">
-        {(Object.keys(STATUS_LABELS) as InboxStatus[]).map((s) => (
-          <Link
-            key={s}
-            href={statusHref(s)}
-            aria-current={s === status ? "page" : undefined}
-            className={cn(
-              "flex h-9 items-center justify-between rounded-lg px-3 text-sm outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40",
-              s === status && "bg-primary text-primary-foreground hover:bg-primary",
-            )}
-          >
-            {STATUS_LABELS[s]}
-            <span className={cn("text-xs tabular-nums", s === status ? "text-primary-foreground/80" : "text-muted-foreground")}>{counts[s]}</span>
-          </Link>
-        ))}
+        {(Object.keys(STATUS_LABELS) as InboxStatus[]).map((s) => {
+          const Icon = STATUS_ICONS[s];
+          return (
+            <Link
+              key={s}
+              href={statusHref(s)}
+              aria-current={s === status ? "page" : undefined}
+              className={cn(
+                "flex h-9 items-center gap-2.5 rounded-lg px-3 text-sm outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/40",
+                s === status && "bg-primary text-primary-foreground hover:bg-primary",
+              )}
+            >
+              <Icon className="size-4" strokeWidth={1.5} aria-hidden />
+              <span className="flex-1">{STATUS_LABELS[s]}</span>
+              <Count value={counts[s]} inverted={s === status} />
+            </Link>
+          );
+        })}
         <div className="my-2 border-t" />
         <button
           type="button"
@@ -137,7 +157,7 @@ export function InboxView({
           >
             <span className={cn("size-2.5 rounded-full", k.dot)} aria-hidden />
             <span className="flex-1">{k.label}</span>
-            <span className="text-xs text-muted-foreground tabular-nums">{counts[k.kind]}</span>
+            <Count value={counts[k.kind]} />
           </button>
         ))}
       </nav>
@@ -181,10 +201,10 @@ export function InboxView({
                   <button
                     type="button"
                     onClick={() => select(item.id)}
-                    aria-current={item.id === selectedId ? "true" : undefined}
+                    aria-current={item.id === selected?.id ? "true" : undefined}
                     className={cn(
                       "flex w-full flex-col gap-1.5 rounded-xl border bg-background p-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/40",
-                      item.id === selectedId && "border-foreground/30 bg-muted/60",
+                      item.id === selected?.id && "border-foreground/30 bg-muted/60",
                     )}
                   >
                     <span className="flex items-baseline justify-between gap-2">
@@ -194,8 +214,12 @@ export function InboxView({
                     <span className="truncate text-sm">{item.title}</span>
                     <span className="line-clamp-2 text-sm text-muted-foreground">{item.snippet}</span>
                     <span className="mt-1 flex flex-wrap gap-1.5">
-                      <Badge>{KIND_LABEL[item.kind]}</Badge>
-                      <Badge variant="outline">{item.startsAt ? formatReminderTime(new Date(item.startsAt), timezone) : "No date"}</Badge>
+                      <Badge variant={KIND_BADGE[item.kind]}>{KIND_LABEL[item.kind]}</Badge>
+                      {item.startsAt ? (
+                        <Badge variant="outline">{formatReminderTime(new Date(item.startsAt), timezone)}</Badge>
+                      ) : (
+                        <Badge variant="neutral">No date</Badge>
+                      )}
                       {item.foundBy === "invite" ? <Badge variant="outline">Invite</Badge> : null}
                     </span>
                   </button>
@@ -330,7 +354,7 @@ function Details({
             <p className="text-xs text-muted-foreground">
               {item.foundBy === "invite" ? "Read from the calendar invite" : "Found by your AI. Check the details before saving."}
             </p>
-            <Badge>{KIND_LABEL[item.kind]}</Badge>
+            <Badge variant={KIND_BADGE[item.kind]}>{KIND_LABEL[item.kind]}</Badge>
           </div>
           <p className="text-lg tracking-tight">{item.title}</p>
           <dl className="flex flex-col gap-2 text-sm">
@@ -366,6 +390,20 @@ function Details({
         onCreated={onBack}
       />
     </>
+  );
+}
+
+/** A count in a small outlined pill, like the reference's folder counts. */
+function Count({ value, inverted = false }: { value: number; inverted?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "min-w-6 rounded-full border px-1.5 text-center text-xs leading-5 tabular-nums",
+        inverted ? "border-primary-foreground/25 text-primary-foreground/80" : "text-muted-foreground",
+      )}
+    >
+      {value}
+    </span>
   );
 }
 
