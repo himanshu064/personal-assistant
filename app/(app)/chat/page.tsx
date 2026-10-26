@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Page } from "@/components/app-shell/page";
+import { ImportButton } from "@/components/projects/import-file";
 import { ProjectChat } from "@/components/projects/project-chat";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getMyQuickThreads, getQuickThreadMessages } from "@/lib/data/chats";
@@ -13,7 +14,7 @@ export const metadata: Metadata = { title: "Chat" };
 /** Quick chats: a general assistant, not tied to a project. Same chat screen as projects. */
 export default function ChatPage(props: PageProps<"/chat">) {
   return (
-    <Page title="Chat" description="Quick chats with your assistant. Move one into a project any time.">
+    <Page title="Chat" description="Quick chats with your assistant. Move one into a project any time." actions={<ImportButton into="chat" label="Import chat" />}>
       <Suspense fallback={<ChatSkeleton />}>
         <QuickChat searchParams={props.searchParams} />
       </Suspense>

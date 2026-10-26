@@ -7,6 +7,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import {
   ArrowUpIcon,
+  DownloadIcon,
   FolderInputIcon,
   KeyRoundIcon,
   MessageSquarePlusIcon,
@@ -35,6 +36,7 @@ import { MAX_MESSAGE_CHARS, type ProjectChatMessage } from "@/lib/projects/chat-
 import { safeAction } from "@/lib/safe-action";
 import { formatRelative } from "@/lib/time";
 import { ChatMessage } from "./chat-message";
+import { downloadExport } from "./import-file";
 
 /**
  * A new chat's id, made in the browser so every request of the chat carries it.
@@ -259,6 +261,10 @@ export function ProjectChat({
               Move to...
             </DropdownMenuItem>
           ) : null}
+          <DropdownMenuItem onClick={() => downloadExport(`/api/chats/${thread.id}/export`)}>
+            <DownloadIcon />
+            Export chat
+          </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => setConfirmDelete(thread)}>
             <Trash2Icon />
             Delete

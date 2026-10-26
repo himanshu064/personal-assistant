@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { MessagesSquareIcon, FolderIcon } from "lucide-react";
 import { Page } from "@/components/app-shell/page";
 import { EmptyState } from "@/components/common/empty-state";
+import { ImportButton } from "@/components/projects/import-file";
 import { NewProjectButton } from "@/components/projects/new-project-button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,7 +15,16 @@ export const metadata: Metadata = { title: "Projects" };
 
 export default function ProjectsPage() {
   return (
-    <Page title="Projects" description="Tell the assistant about each project, then ask it anything later." actions={<NewProjectButton />}>
+    <Page
+      title="Projects"
+      description="Tell the assistant about each project, then ask it anything later."
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <ImportButton into="projects" label="Import project" />
+          <NewProjectButton />
+        </div>
+      }
+    >
       <Suspense fallback={<ProjectsSkeleton />}>
         <ProjectsGrid />
       </Suspense>

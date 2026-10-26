@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { MoreHorizontalIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { DownloadIcon, MoreHorizontalIcon, PencilIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { ModalFooter, ResponsiveModal } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,14 +16,20 @@ import { Spinner } from "@/components/ui/spinner";
 import { toast } from "@/components/ui/toast";
 import { deleteProject, updateProject } from "@/app/(app)/projects/actions";
 import { safeAction } from "@/lib/safe-action";
+import { downloadExport, useImportFile } from "./import-file";
 import { ProjectForm } from "./project-form";
 
-/** Rename or delete. Delete asks first, because it removes every chat and the memory of the project. */
+/**
+ * Rename, export (a JSON file with the memory and every chat), import a chat
+ * file into this project, or delete. Delete asks first, because it removes
+ * every chat and the memory of the project.
+ */
 export function ProjectMenu({ project }: { project: { id: string; name: string; description: string | null } }) {
   const router = useRouter();
   const [renaming, setRenaming] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [deleting, startDelete] = useTransition();
+  const importChat = useImportFile(project.id);
 
   return (
     <>
@@ -36,6 +42,14 @@ export function ProjectMenu({ project }: { project: { id: string; name: string; 
             <PencilIcon />
             Rename
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => downloadExport(`/api/projects/${project.id}/export`)}>
+            <DownloadIcon />
+            Export project
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={importChat.open} disabled={importChat.busy}>
+            <UploadIcon />
+            Import chat
+          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onClick={() => setConfirming(true)}>
             <Trash2Icon />
@@ -43,6 +57,7 @@ export function ProjectMenu({ project }: { project: { id: string; name: string; 
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {importChat.input}
 
       <ResponsiveModal open={renaming} onOpenChange={setRenaming} title="Rename project">
         <ProjectForm
