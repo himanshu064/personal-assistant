@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { MicIcon, SearchIcon } from "lucide-react";
 import {
   Command,
   CommandDialog,
@@ -12,10 +12,12 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { useOpenAssistant } from "@/components/assistant/assistant-button";
 import { NAV_ITEMS } from "@/lib/constants/nav";
 
 /** Grey search field in the sidebar; opens a quick jump palette (also on Cmd/Ctrl K). */
 export function CommandSearch() {
+  const openAssistant = useOpenAssistant();
   const router = useRouter();
   const [open, setOpen] = useState(false);
 
@@ -46,15 +48,20 @@ export function CommandSearch() {
         <span className="flex-1 text-left group-data-[collapsible=icon]:sr-only">Search</span>
         <kbd className="text-xs group-data-[collapsible=icon]:hidden">⌘K</kbd>
       </button>
-      <CommandDialog open={open} onOpenChange={setOpen} title="Search" description="Jump to a page or start a reminder">
+      <CommandDialog open={open} onOpenChange={setOpen} title="Search" description="Jump to a page or talk to your assistant">
         <Command>
           <CommandInput placeholder="Type a page name..." />
         <CommandList>
           <CommandEmpty>Nothing matches that.</CommandEmpty>
           <CommandGroup heading="Actions">
-            <CommandItem onSelect={() => go("/home")}>
-              <PlusIcon />
-              New reminder (Quick capture on Home)
+            <CommandItem
+              onSelect={() => {
+                setOpen(false);
+                openAssistant();
+              }}
+            >
+              <MicIcon />
+              Talk to your assistant (reminder, note or question)
             </CommandItem>
           </CommandGroup>
           <CommandGroup heading="Pages">

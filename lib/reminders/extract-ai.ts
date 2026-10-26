@@ -1,5 +1,4 @@
 import "server-only";
-import { generateText, Output, type LanguageModel } from "ai";
 import { z } from "zod";
 import { toLocalInputValue } from "@/lib/time";
 import { REPEAT_OPTIONS } from "@/lib/reminders/repeat";
@@ -28,34 +27,6 @@ export const draftSchema = z.object({
       "How it repeats, only if the user said so: 'every day' daily, 'every weekday' or 'Monday to Friday' weekdays, 'every Monday' weekly (localDateTime on the next Monday), 'every month' monthly, 'every year' or 'birthday' yearly. Otherwise none.",
     ),
 });
-
-/**
- * Turns spoken text into a reminder draft with the given model. The
- * model gets the current local time so "next Friday 5pm" resolves correctly.
- * The result is only a draft: the preview card shows it and the server
- * validates again on save.
- */
-export async function extractReminderWithAi(
-  model: LanguageModel,
-  text: string,
-  timeZone: string,
-  now: Date = new Date(),
-): Promise<ReminderDraft> {
-  const { output } = await generateText({
-    model,
-    output: Output.object({ schema: draftSchema }),
-    // A lookup, not a puzzle (the dates are written out), so no thinking: the answer starts at once.
-    reasoning: "none",
-    maxRetries: 1,
-    system:
-      "You turn a short spoken note into a single reminder. " +
-      "Resolve relative dates with the current local time and the list of days given. " +
-      "If only a day is given, use 09:00. Never invent details that are not in the text.",
-    prompt: `${timeContext(timeZone, now)}\nNote: """${text}"""`,
-  });
-
-  return draftFromOutput(output);
-}
 
 /**
  * The current local time plus the next 14 dates with their weekdays, for the

@@ -7,7 +7,6 @@ import Link from "next/link";
 import { BellIcon, CircleCheckIcon, SearchXIcon } from "lucide-react";
 import { EmptyState } from "@/components/common/empty-state";
 import { Button } from "@/components/ui/button";
-import { NewReminderButton } from "@/components/reminders/new-reminder-button";
 import { NotificationsPrompt } from "@/components/reminders/notifications-prompt";
 import { RemindersTable } from "@/components/reminders/reminders-table";
 import { TableSkeleton } from "@/components/common/skeletons";
@@ -21,7 +20,6 @@ export default function RemindersPage(props: PageProps<"/reminders">) {
     <Page
       title="Reminders"
       description="Everything you asked your assistant to remember."
-      actions={<NewReminderButton />}
       tabs={
         <Suspense fallback={<div className="h-11 border-b" />}>
           <RemindersTabs />
@@ -75,8 +73,7 @@ async function RemindersList({ searchParams }: { searchParams: PageProps<"/remin
           <EmptyState
             icon={BellIcon}
             title="Nothing coming up"
-            description="Say or type what you want to remember and it will show here."
-            action={<NewReminderButton />}
+            description="Tap the mic and say what you want to remember. It will show here."
           />
         ) : (
           <EmptyState icon={CircleCheckIcon} title="Nothing done yet" description="Reminders you mark as done move here." />

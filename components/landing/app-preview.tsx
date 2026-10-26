@@ -62,10 +62,6 @@ export function AppPreview() {
               <p className="text-3xl tracking-tight md:text-4xl">Home</p>
               <p className="text-sm text-muted-foreground">Good afternoon, Riya.</p>
             </div>
-            <span className="hidden h-9 items-center gap-2 rounded-xl bg-primary px-3 text-sm text-primary-foreground sm:flex">
-              <BellIcon className="size-4" strokeWidth={1.5} />
-              New reminder
-            </span>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3">

@@ -49,11 +49,6 @@ export type ReminderFormInput = z.input<typeof reminderFormSchema>;
 export type ReminderFormValues = z.output<typeof reminderFormSchema>;
 
 /** Text spoken or typed by the user, to be turned into a draft. */
-export const reminderTextSchema = z.object({
-  text: z.string().trim().min(2, "Say or type what to remember.").max(1000, "That is too long for one reminder."),
-  timezone: z.string().min(1),
-});
-
 /** A draft for the preview card. Never saved without the user tapping Save. */
 export type ReminderDraft = {
   title: string;

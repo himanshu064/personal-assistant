@@ -2,7 +2,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AlarmClockIcon, BellIcon, CalendarCheckIcon, CircleCheckIcon, MoveRightIcon } from "lucide-react";
 import { Page } from "@/components/app-shell/page";
-import { NewReminderButton } from "@/components/reminders/new-reminder-button";
 import { NotificationsPrompt } from "@/components/reminders/notifications-prompt";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,7 +20,6 @@ export default function DashboardPage() {
           <Greeting />
         </Suspense>
       }
-      actions={<NewReminderButton />}
     >
       <NotificationsPrompt />
 

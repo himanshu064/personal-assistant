@@ -8,60 +8,22 @@ import { z } from "zod";
 import { db } from "@/db";
 import { aiKeys, emailItems, reminders } from "@/db/schema";
 import { MODEL_CATALOG } from "@/lib/ai/models";
-import { getDraftContext } from "@/lib/ai/user-model";
 import { withUsage } from "@/lib/ai/usage";
 import { alertSchedule } from "@/lib/reminders/schedule";
-import { normaliseSpokenTimes } from "@/lib/reminders/spoken-text";
 import { completeReminder } from "@/lib/reminders/complete";
 import { SNOOZE_PRESETS, snoozeReminderFor } from "@/lib/reminders/snooze";
 import { decrypt } from "@/lib/crypto";
 import { inboxTag } from "@/lib/data/inbox-tags";
 import { remindersTag } from "@/lib/data/reminders";
-import { extractReminderWithAi } from "@/lib/reminders/extract-ai";
-import { parseReminderWithRules } from "@/lib/reminders/parse-rules";
 import { requireUser } from "@/lib/session";
 import { fromLocalInputValue } from "@/lib/time";
-import { reminderFormSchema, reminderTextSchema, type ReminderDraft } from "@/lib/validation/reminders";
+import { reminderFormSchema } from "@/lib/validation/reminders";
 import { isValidTimezone } from "@/lib/validation/settings";
 
 type Fail = { ok: false; error: string; field?: string };
 
 /** Slack for the time it takes to tap Save. */
 const SAVE_GRACE_MS = 60_000;
-
-/**
- * Turns spoken or typed text into a draft for the preview card. Uses the
- * fast model of the user's provider when they have a key, otherwise the free rules parser. If
- * the AI call fails, it falls back to the rules parser instead of failing.
- * Nothing is saved here. One database round trip (getDraftContext).
- */
-export async function draftReminder(input: unknown): Promise<{ ok: true; draft: ReminderDraft; timezone: string } | Fail> {
-  const user = await requireUser();
-  const parsed = reminderTextSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Try again." };
-
-  const context = await getDraftContext(user.id, "reminder");
-  // Spoken times ("5 30 PM") written as normal times ("5:30 PM") before anything reads them.
-  const text = normaliseSpokenTimes(parsed.data.text);
-  // The saved timezone wins; the browser's is the fallback for brand new users.
-  const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");
-
-  let draft: ReminderDraft | null = null;
-  // The user waits on the preview, and it only reads a date: the provider's fast model does it.
-  const model = context.cheapModel ?? context.model;
-  if (model) {
-    try {
-      draft = await extractReminderWithAi(model, text, timezone);
-    } catch (error) {
-      console.warn("reminders.draft.ai_failed", { message: error instanceof Error ? error.message : String(error) });
-    }
-  }
-  draft ??= parseReminderWithRules(text, timezone);
-  // The user's default alert time applies when the sentence did not ask for one.
-  if (draft.leadMinutes === 0) draft.leadMinutes = context.defaultLeadMinutes;
-  if (draft.alertCount === 0) draft.alertCount = context.defaultAlertCount;
-  return { ok: true, draft, timezone };
-}
 
 /** Form values plus the timezone the preview was shown in (validated, never trusted blindly). */
 const timedSchema = reminderFormSchema.extend({

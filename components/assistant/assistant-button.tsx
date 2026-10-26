@@ -8,6 +8,11 @@ import { Assistant } from "./assistant";
 
 const OpenAssistant = createContext<() => void>(() => {});
 
+/** Opens the assistant (listening), from anywhere inside AssistantProvider. */
+export function useOpenAssistant() {
+  return useContext(OpenAssistant);
+}
+
 /** The one assistant sheet, opened by the phone tab or the desktop button. */
 export function AssistantProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
