@@ -6,10 +6,8 @@ import { browserTimezone, ReminderPreview, type Preview } from "@/components/rem
 import { ModalBody, ModalFooter } from "@/components/common/responsive-modal";
 import { Button } from "@/components/ui/button";
 import { VoiceCapture } from "@/components/reminders/voice-capture";
-import { askAssistant, type AssistantChoice, type SavedReminder } from "@/app/(app)/assistant/actions";
-import { deleteReminder } from "@/app/(app)/reminders/actions";
-import { toast } from "@/components/ui/toast";
-import { formatReminderTime } from "@/lib/time";
+import { askAssistant, type AssistantChoice } from "@/app/(app)/assistant/actions";
+import { showSavedReminder } from "@/components/reminders/saved-toast";
 import { handOff, QUICK_CHAT_HANDOFF } from "@/lib/assistant/handoff";
 import { safeAction } from "@/lib/safe-action";
 
@@ -43,9 +41,9 @@ export function Assistant({ onDone }: { onDone: () => void }) {
     if (result.kind === "saved") {
       // Saved straight away (the mic is the shortcut); Undo removes it again.
       onDone();
-      return showSaved(result);
+      return showSavedReminder(result);
     }
-    if (result.saved) showSaved(result.saved);
+    if (result.saved) showSavedReminder(result.saved);
     go(result, text, source);
   }
 
@@ -108,23 +106,6 @@ export function Assistant({ onDone }: { onDone: () => void }) {
       ) : null}
     </ModalBody>
   );
-}
-
-function showSaved(saved: SavedReminder) {
-  const savedId = saved.id;
-  toast.add({
-    title: `Reminder saved: ${saved.title}`,
-    description: formatReminderTime(new Date(saved.remindAt), saved.timezone),
-    type: "success",
-    timeout: 8000,
-    actionProps: {
-      children: "Undo",
-      onClick: () =>
-        void safeAction(() => deleteReminder(savedId)).then((r) =>
-          toast.add(r.ok ? { title: "Reminder removed", type: "success" } : { title: r.error, type: "error" }),
-        ),
-    },
-  });
 }
 
 function choiceLabel(choice: AssistantChoice) {

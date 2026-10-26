@@ -24,7 +24,7 @@ How it decides: you never say whether it is new or about something you already h
 
 ## Reminders
 
-- **New reminder** (Home or Reminders): speak or type, then check the **preview** and save.
+- **New reminder** (Home or Reminders): speak or type. With a clear title and time it is saved straight away (with **Undo**); otherwise the **preview** opens to ask for what is missing.
 - **Alert me**: 15, 30, 45 minutes or 1 hour before (Settings > General sets the default).
 - **Remind me**: once to 5 times, 15 minutes apart, ending at the Alert me time. Example: call at 4:40, 15 minutes, 3 times: alerts at 4:00, 4:15, 4:30.
 - **Repeat**: does not repeat, daily, every weekday, weekly, monthly, yearly. After its time passes (or when marked done), a repeating reminder moves to its next date. Monthly on the 31st uses the last day of short months.

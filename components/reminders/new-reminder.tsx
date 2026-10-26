@@ -6,6 +6,8 @@ import { createReminder, draftReminder } from "@/app/(app)/reminders/actions";
 import type { ReminderDraft } from "@/lib/validation/reminders";
 import { safeAction } from "@/lib/safe-action";
 import { ModalBody } from "@/components/common/responsive-modal";
+import { fromLocalInputValue } from "@/lib/time";
+import { showSavedReminder } from "./saved-toast";
 import { ReminderForm } from "./reminder-form";
 import { VoiceCapture } from "./voice-capture";
 
@@ -16,8 +18,9 @@ export function browserTimezone() {
 }
 
 /**
- * "New reminder": speak (first) or type, then check the preview (with Repeat)
- * and save. The floating mic is the shortcut that saves straight away.
+ * "New reminder": speak (first) or type. With a clear title and a future
+ * time it is saved straight away (Undo in the toast), like the mic; otherwise
+ * the preview (with Repeat) asks for what is missing.
  * Unframed, so the New dialog can place it.
  */
 export function NewReminder({ onSaved }: { onSaved?: () => void }) {
@@ -29,9 +32,22 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
     setDrafting(true);
     setError(null);
     const result = await safeAction(() => draftReminder({ text, timezone: browserTimezone() }));
+    if (!result.ok) {
+      setDrafting(false);
+      return setError(result.error);
+    }
+    const { draft, timezone } = result;
+    const at = draft.remindAt ? fromLocalInputValue(draft.remindAt, timezone) : null;
+    if (draft.title && at && at.getTime() > Date.now()) {
+      const saved = await safeAction(() => createReminder({ ...draft, timezone, source }));
+      if (saved.ok) {
+        showSavedReminder({ id: saved.id, title: draft.title, remindAt: at.toISOString(), timezone });
+        return onSaved?.();
+      }
+    }
+    // Missing or unclear (or the save was refused): the preview shows what to fix.
     setDrafting(false);
-    if (!result.ok) return setError(result.error);
-    setPreview({ draft: result.draft, heard: text, source, timezone: result.timezone });
+    setPreview({ draft, heard: text, source, timezone });
   }
 
   // Speak or type first (scrolling body); the preview brings its own body and fixed footer.
