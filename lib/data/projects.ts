@@ -45,6 +45,29 @@ async function listProjects(userId: string): Promise<ProjectCard[]> {
     .orderBy(desc(projects.updatedAt));
 }
 
+/** How much of each project's memory the assistant reads to decide where a message goes. */
+const ASSISTANT_MEMORY_CHARS = 300;
+
+/**
+ * The 30 most recently active projects, with the start of their memory, so
+ * the assistant can match "the contractor" to "Kitchen renovation". Not
+ * cached: the memory changes after every project reply.
+ */
+export async function getMyProjectsForAssistant() {
+  const user = await requireUser();
+  return db
+    .select({
+      id: projects.id,
+      name: projects.name,
+      description: projects.description,
+      memory: sql<string>`left(regexp_replace(${projects.memory}, '\\s+', ' ', 'g'), ${ASSISTANT_MEMORY_CHARS})`,
+    })
+    .from(projects)
+    .where(and(eq(projects.userId, user.id), isNull(projects.archivedAt)))
+    .orderBy(desc(projects.updatedAt))
+    .limit(30);
+}
+
 /** One project the signed in user owns, or the 404 page. */
 export async function getMyProject(projectId: string) {
   const user = await requireUser();

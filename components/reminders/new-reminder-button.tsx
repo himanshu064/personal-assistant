@@ -14,7 +14,7 @@ export function NewReminderButton() {
         <BellPlusIcon strokeWidth={1.5} />
         New reminder
       </Button>
-      <ResponsiveModal open={open} onOpenChange={setOpen} title="New reminder">
+      <ResponsiveModal open={open} onOpenChange={setOpen} title="New reminder" fullScreen>
         <NewReminder onSaved={() => setOpen(false)} />
       </ResponsiveModal>
     </>

@@ -188,6 +188,16 @@
   }
 }
 
+/* The "about to send" bar under the live words (voice-capture.tsx): fills during a pause. */
+@keyframes fill-bar {
+  from {
+    scale: 0 1;
+  }
+  to {
+    scale: 1 1;
+  }
+}
+
 /*
  * The reference's double-layer surface: inner hairline, a 6px light frame,
  * then an outer hairline. Done with stacked shadows so it follows the corner

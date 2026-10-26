@@ -3,7 +3,7 @@ import type { AiProvider } from "./providers";
 
 /**
  * Built in defaults: the cheapest model of each provider. Used before a key
- * is saved, for background work (project memory, Gmail), and when a
+ * is saved, for quick and background work (the mic, reminder drafts, project memory, Gmail), and when a
  * provider's model list cannot be read. Every other model a user can pick
  * comes live from their own key (see lib/ai/list-models.ts).
  */

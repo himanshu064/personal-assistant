@@ -8,12 +8,14 @@ import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { transcribeAudio } from "@/app/(app)/reminders/actions";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
-import { useSpeechRecognition } from "@/hooks/use-speech-recognition";
+import { SILENCE_MS, useSpeechRecognition } from "@/hooks/use-speech-recognition";
 import { safeAction } from "@/lib/safe-action";
 
 /**
  * Big mic button with a typing fallback.
- * 1. Browser speech recognition when available (free, live words).
+ * 1. Browser speech recognition when available (free, live words): a light
+ *    welcome line, replaced by the words as they are heard; after a 3 second
+ *    pause (shown by a filling bar) the sentence is handed over.
  * 2. Otherwise record a clip and transcribe it with the user's Gemini key.
  * 3. Typing always works.
  */
@@ -21,12 +23,18 @@ export function VoiceCapture({
   onText,
   busy = false,
   prompt = "Tap and say what to remember",
+  welcome = "Listening...",
+  large = false,
   autoStart = false,
   placeholder = "For example: Call Ravi tomorrow at 5pm",
 }: {
   onText: (text: string, source: "voice" | "text") => void;
   busy?: boolean;
   prompt?: string;
+  /** Shown, light, while listening and before the first word. */
+  welcome?: string;
+  /** Bigger live words, for a full screen. */
+  large?: boolean;
   /** Start listening as soon as it shows (the tap that opened it allows the microphone). */
   autoStart?: boolean;
   placeholder?: string;
@@ -55,6 +63,8 @@ export function VoiceCapture({
   const active = useSpeech ? speech.listening : recorder.recording;
   const error = useSpeech ? speech.error : recorder.error ?? fallbackError;
   const working = busy || transcribing;
+  /** The live words; they stay on screen while the request is worked out. */
+  const heard = useSpeech && (active || working) ? speech.transcript : "";
 
   function toggle() {
     if (active) return useSpeech ? speech.stop() : recorder.stop();
@@ -73,6 +83,17 @@ export function VoiceCapture({
     }, 0);
     return () => clearTimeout(timer);
   }, [autoStart, canVoice, useSpeech, speech, recorder]);
+
+  /** Switches to typing, even mid sentence: listening stops and the words heard so far can be edited. */
+  function typeInstead() {
+    if (active) {
+      if (useSpeech) {
+        setTyped(speech.transcript);
+        speech.cancel();
+      } else recorder.cancel();
+    }
+    setTyping(true);
+  }
 
   function submitTyped(event: React.FormEvent) {
     event.preventDefault();
@@ -120,7 +141,7 @@ export function VoiceCapture({
         onClick={toggle}
         disabled={working}
         aria-pressed={active}
-        aria-label={active ? "Stop listening" : "Start speaking"}
+        aria-label={heard ? "Send now" : active ? "Stop listening" : "Start speaking"}
         className={cn(
           // The one bold element in the app: a dark orb that turns amber while listening.
           "relative isolate flex size-28 items-center justify-center rounded-full bg-primary text-primary-foreground outline-none",
@@ -140,16 +161,27 @@ export function VoiceCapture({
         {working ? <Spinner className="size-9" /> : active ? <SquareIcon className="size-8 fill-current" /> : <MicIcon className="size-11" strokeWidth={1.75} />}
       </button>
 
-      <div className="flex min-h-12 max-w-sm flex-col items-center gap-1" aria-live="polite">
-        <p className={cn("text-base", active && speech.transcript ? "text-foreground" : "text-muted-foreground")}>
-          {working
-            ? transcribing
-              ? "Listening back to your recording..."
-              : "Working it out..."
-            : active
-              ? speech.transcript || "Listening..."
-              : prompt}
+      <div className="flex min-h-20 w-full max-w-md flex-col items-center gap-3" aria-live="polite">
+        <p
+          className={cn(
+            "leading-snug text-balance transition-colors duration-150",
+            active || heard ? (large ? "text-2xl md:text-3xl" : "text-xl") : "text-base",
+            heard ? "text-foreground" : "text-muted-foreground",
+          )}
+        >
+          {transcribing ? "Listening back to your recording..." : heard || (working ? "Working it out..." : active ? welcome : prompt)}
         </p>
+        {heard && working ? <p className="text-sm text-muted-foreground">Working it out...</p> : null}
+        {heard && active ? (
+          // Starts again with every new word, so it only fills while the user is quiet.
+          <span className="h-0.5 w-24 overflow-hidden rounded-full bg-muted motion-reduce:hidden" aria-hidden>
+            <span
+              key={heard}
+              className="block h-full origin-left rounded-full bg-live animate-[fill-bar_linear_forwards]"
+              style={{ animationDuration: `${SILENCE_MS}ms` }}
+            />
+          </span>
+        ) : null}
         {error ? (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -157,7 +189,7 @@ export function VoiceCapture({
         ) : null}
       </div>
 
-      <Button variant="ghost" size="sm" onClick={() => setTyping(true)} disabled={active || working} className="text-muted-foreground">
+      <Button variant="ghost" size="sm" onClick={typeInstead} disabled={working} className="text-muted-foreground">
         <KeyboardIcon />
         Type instead
       </Button>

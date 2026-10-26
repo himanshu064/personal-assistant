@@ -18,7 +18,7 @@ export type DraftContext = {
   defaultAlertCount: number;
   /** The model the user picked, built with their own key; null without a key for that provider. */
   model: LanguageModel | null;
-  /** The cheapest model of the same provider and key, for background work such as project memory. */
+  /** The cheapest (and fastest) model of the same provider and key: the mic, reminder drafts, project memory and Gmail. */
   cheapModel: LanguageModel | null;
   /** The provider and model id behind `model`, shown with chat answers. */
   provider: AiProvider;

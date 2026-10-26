@@ -38,8 +38,8 @@ export function NewReminder({ onSaved }: { onSaved?: () => void }) {
   return preview ? (
     <ReminderPreview preview={preview} onCancel={() => setPreview(null)} onSaved={() => (setPreview(null), onSaved?.())} />
   ) : (
-    <ModalBody>
-      <VoiceCapture onText={handleText} busy={drafting} />
+    <ModalBody className="justify-center">
+      <VoiceCapture onText={handleText} busy={drafting} large />
       {error ? (
         <p role="alert" className="text-center text-sm text-destructive">
           {error}

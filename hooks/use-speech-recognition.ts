@@ -29,7 +29,7 @@ function getCtor(): SpeechRecognitionCtor | null {
 const noopSubscribe = () => () => {};
 
 /** Listening ends this long after the last word heard (the user has finished speaking). */
-const SILENCE_MS = 2000;
+export const SILENCE_MS = 3000;
 /** Nothing heard this long after tapping the mic: stop (some browsers never end by themselves). */
 const NO_SPEECH_MS = 8000;
 /** iPhone: the gap before listening again after a phrase ends (from the iOS guide below). */
@@ -81,7 +81,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 /**
  * The browser's free speech to text (Chrome, Edge, Safari including iPhone).
  * Shows words live, as one line, while the user speaks, and calls onFinal once
- * with the whole sentence: about 2 seconds after the last word, or when stopped.
+ * with the whole sentence: SILENCE_MS (3 seconds) after the last word, or when stopped.
  * How pauses are handled depends on the platform (see Platform above).
  * `supported` is false in browsers without it (mainly Firefox).
  */
@@ -218,6 +218,20 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
     else finish(); // between two iPhone phrases
   }, [finish]);
 
+  /** "Type instead": ends the turn now and hands nothing over. */
+  const cancel = useCallback(() => {
+    wantedRef.current = false;
+    clearTimers();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (recognition) {
+      recognition.onresult = recognition.onerror = recognition.onend = null;
+      recognition.abort();
+    }
+    committedRef.current = "";
+    setListening(false);
+  }, []);
+
   // Stop listening if the component goes away mid sentence (abort hands nothing over).
   useEffect(() => {
     aliveRef.current = true;
@@ -229,5 +243,5 @@ export function useSpeechRecognition({ onFinal }: { onFinal: (text: string) => v
     };
   }, []);
 
-  return { supported, listening, transcript, error, start, stop };
+  return { supported, listening, transcript, error, start, stop, cancel };
 }

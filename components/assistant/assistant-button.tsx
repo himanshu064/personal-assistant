@@ -22,7 +22,7 @@ export function AssistantProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
-      <ResponsiveModal open={open} onOpenChange={setOpen} title="Assistant">
+      <ResponsiveModal open={open} onOpenChange={setOpen} title="Assistant" fullScreen hideTitle>
         <Assistant key={session} onDone={() => setOpen(false)} />
       </ResponsiveModal>
     </OpenAssistant.Provider>

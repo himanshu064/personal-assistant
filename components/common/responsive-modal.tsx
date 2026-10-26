@@ -12,6 +12,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
  * <ModalBody> (the only part that scrolls) and an optional <ModalFooter>
  * (fixed buttons). A form can wrap both, so its submit button lives in the
  * footer: <form className={modalFormClass}><ModalBody/><ModalFooter/></form>.
+ * `fullScreen`: the whole screen on phones and desktops alike, content in a
+ * centred column (the assistant, so nothing distracts while speaking).
  */
 export function ResponsiveModal({
   open,
@@ -19,14 +21,40 @@ export function ResponsiveModal({
   title,
   description,
   children,
+  fullScreen = false,
+  hideTitle = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
   description?: string;
   children: ReactNode;
+  fullScreen?: boolean;
+  /** Full screen only: the title is for screen readers, not shown. */
+  hideTitle?: boolean;
 }) {
   const isMobile = useIsMobile();
+
+  if (fullScreen) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          className={cn(
+            "inset-0 top-0 left-0 flex h-dvh w-full max-w-none translate-x-0 translate-y-0 flex-col gap-0 rounded-none bg-background p-0 ring-0 sm:max-w-none",
+            "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]",
+          )}
+        >
+          <div className="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col">
+            <DialogHeader className={cn("shrink-0 px-4 pt-6 pb-4 pr-12 md:px-6", hideTitle && "sr-only")}>
+              <DialogTitle className="text-2xl font-normal tracking-tight">{title}</DialogTitle>
+              {description ? <DialogDescription>{description}</DialogDescription> : null}
+            </DialogHeader>
+            <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (isMobile) {
     return (

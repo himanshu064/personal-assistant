@@ -26,6 +26,8 @@ export function useAudioRecorder({ onRecorded }: { onRecorded: (audio: Blob) => 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onRecordedRef = useRef(onRecorded);
+  /** Set by cancel: the clip is thrown away instead of handed over. */
+  const discardRef = useRef(false);
 
   useEffect(() => {
     onRecordedRef.current = onRecorded;
@@ -38,6 +40,7 @@ export function useAudioRecorder({ onRecorded }: { onRecorded: (audio: Blob) => 
 
   const start = useCallback(async () => {
     setError(null);
+    discardRef.current = false;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -55,7 +58,7 @@ export function useAudioRecorder({ onRecorded }: { onRecorded: (audio: Blob) => 
       recorderRef.current = null;
       setRecording(false);
       const audio = new Blob(chunks, { type: recorder.mimeType || mimeType || "audio/webm" });
-      if (audio.size > 0) onRecordedRef.current(audio);
+      if (audio.size > 0 && !discardRef.current) onRecordedRef.current(audio);
     };
 
     recorderRef.current = recorder;
@@ -64,7 +67,13 @@ export function useAudioRecorder({ onRecorded }: { onRecorded: (audio: Blob) => 
     timerRef.current = setTimeout(stop, MAX_SECONDS * 1000);
   }, [stop]);
 
+  /** "Type instead": stops recording and throws the clip away. */
+  const cancel = useCallback(() => {
+    discardRef.current = true;
+    stop();
+  }, [stop]);
+
   useEffect(() => () => stop(), [stop]);
 
-  return { supported, recording, error, start, stop };
+  return { supported, recording, error, start, stop, cancel };
 }

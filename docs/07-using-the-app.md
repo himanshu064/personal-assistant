@@ -5,7 +5,7 @@
 - Users add their own **Claude (Anthropic)** or **Gemini (Google)** key. Keys are checked with the provider when saved, stored encrypted, and only the last 4 characters are ever shown.
 - Several keys per provider are allowed. One is **In use**; tap **Use this key** to switch.
 - **Usage, last 30 days** shows the tokens each key and model used, to compare them.
-- **Settings > General > Model** lists the models the user's key can use, live from the provider. The cheapest model is the default.
+- **Settings > General > Model** lists the models the user's key can use, live from the provider. The cheapest model is the default. The chosen model answers chats; the mic, reminder drafts, project memory and Gmail always use the provider's fastest, lowest cost model (Claude Haiku or Gemini Flash Lite), with thinking off for the mic and reminder drafts.
 - Without any key: reminders still work with a simpler text reader; chats need a key.
 
 ## The mic button
@@ -17,9 +17,10 @@
 |---|---|
 | "remind me to call mom at 5", "walk the dog tomorrow at 7am" | Saves a **reminder** straight away (with **Undo**). No time said: opens the preview to ask |
 | "start a chat about trip planning", "what is the capital of France" | Opens a new **Chat** with that as the first message |
-| "Aman gave me 200 rupees for Billing" | Sends it to that **project's** chat |
+| "Aman gave me 200 rupees for Billing", "how much have I paid the contractor?" | Sends it to that **project's** chat |
+| Fits two places (two projects, or a project and a reminder) | Asks you to pick |
 
-How it decides: explicit words first ("remind me", "start a chat"), then "is it a question or a writing request", then "is there a future time and not past tense", then "does it start with a task word". If still unclear, the AI decides. See `lib/assistant/detect-intent.ts`.
+How it decides: you never say whether it is new or about something you already have, so the AI decides. It sees your projects (name, description and the start of what each one remembers), the project you are looking at, and the next 14 dates. If two places fit about equally well, it asks you to pick. "Ravi paid 5000 for the kitchen, remind me to pay the plumber on Friday" does both. Without an AI key, everything you say is read as a reminder (the free rules parser finds the time). See `app/(app)/assistant/actions.ts`.
 
 ## Reminders
 

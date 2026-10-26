@@ -31,7 +31,7 @@ const SAVE_GRACE_MS = 60_000;
 
 /**
  * Turns spoken or typed text into a draft for the preview card. Uses the
- * user's AI model when they have a key, otherwise the free rules parser. If
+ * fast model of the user's provider when they have a key, otherwise the free rules parser. If
  * the AI call fails, it falls back to the rules parser instead of failing.
  * Nothing is saved here. One database round trip (getDraftContext).
  */
@@ -47,9 +47,11 @@ export async function draftReminder(input: unknown): Promise<{ ok: true; draft: 
   const timezone = context.timezone ?? (isValidTimezone(parsed.data.timezone) ? parsed.data.timezone : "UTC");
 
   let draft: ReminderDraft | null = null;
-  if (context.model) {
+  // The user waits on the preview, and it only reads a date: the provider's fast model does it.
+  const model = context.cheapModel ?? context.model;
+  if (model) {
     try {
-      draft = await extractReminderWithAi(context.model, text, timezone);
+      draft = await extractReminderWithAi(model, text, timezone);
     } catch (error) {
       console.warn("reminders.draft.ai_failed", { message: error instanceof Error ? error.message : String(error) });
     }

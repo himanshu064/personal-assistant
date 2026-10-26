@@ -30,7 +30,7 @@ export const draftSchema = z.object({
 });
 
 /**
- * Turns spoken text into a reminder draft with the user's own model. The
+ * Turns spoken text into a reminder draft with the given model. The
  * model gets the current local time so "next Friday 5pm" resolves correctly.
  * The result is only a draft: the preview card shows it and the server
  * validates again on save.
@@ -41,21 +41,37 @@ export async function extractReminderWithAi(
   timeZone: string,
   now: Date = new Date(),
 ): Promise<ReminderDraft> {
-  const localNow = toLocalInputValue(now, timeZone);
-  const weekday = new Intl.DateTimeFormat("en-US", { timeZone, weekday: "long" }).format(now);
-
   const { output } = await generateText({
     model,
     output: Output.object({ schema: draftSchema }),
+    // A lookup, not a puzzle (the dates are written out), so no thinking: the answer starts at once.
+    reasoning: "none",
     maxRetries: 1,
     system:
       "You turn a short spoken note into a single reminder. " +
-      "Resolve relative dates against the current local time given. " +
+      "Resolve relative dates with the current local time and the list of days given. " +
       "If only a day is given, use 09:00. Never invent details that are not in the text.",
-    prompt: `Current local time: ${weekday}, ${localNow} (${timeZone}).\nNote: """${text}"""`,
+    prompt: `${timeContext(timeZone, now)}\nNote: """${text}"""`,
   });
 
   return draftFromOutput(output);
+}
+
+/**
+ * The current local time plus the next 14 dates with their weekdays, for the
+ * prompt. Models often get "next Friday" wrong when they work out the date
+ * themselves; with the dates written out they only have to look it up.
+ */
+export function timeContext(timeZone: string, now: Date = new Date()): string {
+  const localNow = toLocalInputValue(now, timeZone);
+  const [y, m, d] = localNow.slice(0, 10).split("-").map(Number);
+  // Counted on calendar dates (in UTC), so a daylight saving change never skips or repeats a day.
+  const days = Array.from({ length: 14 }, (_, i) => {
+    const day = new Date(Date.UTC(y, m - 1, d + i));
+    const name = new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "long" }).format(day);
+    return `${name} ${day.toISOString().slice(0, 10)}${i === 0 ? " (today)" : i === 1 ? " (tomorrow)" : ""}`;
+  });
+  return `Current local time: ${days[0].split(" ")[0]}, ${localNow} (${timeZone}).\nThe next 14 days: ${days.join(", ")}.`;
 }
 
 /** Checks what the model returned: an unknown alert time becomes 0, a malformed time becomes "" (the user picks one). */

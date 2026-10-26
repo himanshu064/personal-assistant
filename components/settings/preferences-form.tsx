@@ -162,7 +162,9 @@ export function PreferencesForm({
                 ))}
               </NativeSelect>
               <FieldDescription>
-                {hasKeyForProvider ? "The models your key can use, straight from the provider." : "Add a key to see every model your key can use."}
+                {hasKeyForProvider
+                  ? "Used for chats. The mic, reminders, project memory and Gmail always use the fastest, lowest cost model of this provider."
+                  : "Add a key to see every model your key can use."}
               </FieldDescription>
               {errors.model ? <FieldError>{errors.model.message}</FieldError> : null}
             </Field>
