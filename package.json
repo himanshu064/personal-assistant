@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node init && next dev",
-    "build": "node init && next build",
+    "dev": "next dev",
+    "build": "next build",
     "vercel-build": "drizzle-kit migrate && next build",
-    "start": "node init && next start",
+    "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

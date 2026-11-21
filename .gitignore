@@ -47,4 +47,3 @@ next-env.d.ts
 
 # Local only notes (demo logins)
 *.local.md
-config.bat
